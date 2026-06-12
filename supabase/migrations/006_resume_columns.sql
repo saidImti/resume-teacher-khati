@@ -1,0 +1,12 @@
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS academic_year_id UUID REFERENCES academic_years(id) ON DELETE RESTRICT;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS group_id UUID REFERENCES groups(id) ON DELETE SET NULL;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS level_id UUID REFERENCES levels(id) ON DELETE SET NULL;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS site_id UUID REFERENCES sites(id) ON DELETE SET NULL;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS academic_year_id UUID REFERENCES academic_years(id) ON DELETE SET NULL;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS whatsapp_text TEXT;
+ALTER TABLE resumes ADD COLUMN IF NOT EXISTS tokens_used INT DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_resumes_group_id ON resumes(group_id);
+CREATE INDEX IF NOT EXISTS idx_resumes_level_id ON resumes(level_id);
+CREATE INDEX IF NOT EXISTS idx_resumes_site_id ON resumes(site_id);
+CREATE INDEX IF NOT EXISTS idx_resumes_acad_year ON resumes(academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_academic_year ON sessions(academic_year_id);

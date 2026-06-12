@@ -1,0 +1,1 @@
+// Stub — voir skeleton.tsx
