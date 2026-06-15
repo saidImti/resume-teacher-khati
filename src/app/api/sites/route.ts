@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { withApiAuth } from '@/lib/with-api-auth'
 
 const SiteSchema = z.object({
   name: z.string().min(1, 'Nom requis').max(100),
@@ -20,16 +21,16 @@ function slugify(value: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 })
+    const auth = await withApiAuth(request, 'admin')
+    if (!auth.ok) return auth.response
 
     const parsed = SiteSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json({ error: 'Donnees invalides', details: parsed.error.flatten() }, { status: 400 })
     }
 
-    const { data, error } = await supabase
+    const admin = createAdminSupabaseClient()
+    const { data, error } = await admin
       .from('sites')
       .insert({
         name: parsed.data.name,
@@ -45,11 +46,12 @@ export async function POST(request: NextRequest) {
       if (error.code === '23505') {
         return NextResponse.json({ error: 'Un site avec ce nom existe deja' }, { status: 409 })
       }
-      throw error
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
     return NextResponse.json(data, { status: 201 })
-  } catch {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erreur serveur'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

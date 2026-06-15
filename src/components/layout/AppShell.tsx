@@ -25,11 +25,11 @@ export async function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex min-h-screen bg-background">
       <Sidebar userName={userName} userEmail={userEmail} />
 
       {/* Contenu principal */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex min-w-0 flex-1 flex-col">
         {children}
       </main>
     </div>

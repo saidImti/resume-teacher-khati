@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { withApiAuth } from '@/lib/with-api-auth'
 
 const UpdateSiteSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -23,9 +24,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 })
+    const auth = await withApiAuth(request, 'admin')
+    if (!auth.ok) return auth.response
 
     const { id } = await params
     const parsed = UpdateSiteSchema.safeParse(await request.json())
@@ -37,7 +37,8 @@ export async function PATCH(
     if ('address' in parsed.data) updates.address = parsed.data.address || null
     if (parsed.data.name) updates.slug = slugify(parsed.data.name)
 
-    const { data, error } = await supabase
+    const admin = createAdminSupabaseClient()
+    const { data, error } = await admin
       .from('sites')
       .update(updates)
       .eq('id', id)
@@ -47,22 +48,23 @@ export async function PATCH(
     if (error || !data) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
 
     return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erreur serveur'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifie' }, { status: 401 })
+    const auth = await withApiAuth(request, 'admin')
+    if (!auth.ok) return auth.response
 
     const { id } = await params
-    const { error } = await supabase
+    const admin = createAdminSupabaseClient()
+    const { error } = await admin
       .from('sites')
       .update({ is_active: false })
       .eq('id', id)
@@ -70,7 +72,8 @@ export async function DELETE(
     if (error) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
 
     return NextResponse.json({ success: true })
-  } catch {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Erreur serveur'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }
