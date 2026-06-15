@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { cn } from '@/lib/utils'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +53,15 @@ export function CommandPalette() {
     },
     [router]
   )
+
+  const logout = useCallback(async () => {
+    const supabase = getSupabaseBrowserClient()
+    await supabase.auth.signOut()
+    setOpen(false)
+    setSearch('')
+    router.push('/auth/login')
+    router.refresh()
+  }, [router])
 
   const items: CommandItem[] = [
     // Navigation
@@ -139,7 +149,7 @@ export function CommandPalette() {
       label: 'Se déconnecter',
       group: 'Actions',
       icon: <LogOut className="h-4 w-4 text-destructive" />,
-      action: () => go('/auth/logout'),
+      action: () => { void logout() },
       keywords: 'quitter sortir',
     },
   ]

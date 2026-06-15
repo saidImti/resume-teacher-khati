@@ -5,13 +5,19 @@ import { Calendar, Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2 
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { upsertSchedule, deleteSchedule } from '@/lib/supabase/queries'
 import { DAY_LABELS } from '@/types'
-import type { Site, Schedule, Student, DayOfWeek } from '@/types'
+import type { Group, Level, Site, Schedule, Student, DayOfWeek } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 
 interface Props {
   sites: Site[]
   schedulesByDay: Record<number, Schedule[]>
   students: Student[]
+  groups: GroupWithRelations[]
+}
+
+interface GroupWithRelations extends Group {
+  site?: Site
+  level?: Level
 }
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const
@@ -47,7 +53,7 @@ function siteColor(idx: number) {
   return SLOT_COLORS[idx % SLOT_COLORS.length]!
 }
 
-export function PlanningContent({ sites, schedulesByDay, students }: Props) {
+export function PlanningContent({ sites, schedulesByDay, students, groups }: Props) {
   const [filterSite, setFilterSite] = useState('all')
   const [localSchedules, setLocalSchedules] = useState(schedulesByDay)
   const [modal, setModal] = useState<{ open: boolean; form: SlotForm }>({ open: false, form: EMPTY_FORM })
@@ -75,7 +81,16 @@ export function PlanningContent({ sites, schedulesByDay, students }: Props) {
   const totalSlots = Object.values(filtered).flat().length
 
   function openNew(day: number) {
-    setModal({ open: true, form: { ...EMPTY_FORM, day_of_week: day, site_id: sites[0]?.id ?? '' } })
+    const firstGroup = groups[0]
+    setModal({
+      open: true,
+      form: {
+        ...EMPTY_FORM,
+        day_of_week: day,
+        site_id: firstGroup?.site_id ?? sites[0]?.id ?? '',
+        group_id: firstGroup?.id ?? '',
+      },
+    })
   }
 
   function openEdit(s: Schedule) {
@@ -114,12 +129,20 @@ export function PlanningContent({ sites, schedulesByDay, students }: Props) {
         notes: modal.form.notes || null,
         is_active: true,
       })
+      const selectedGroup = groups.find((g) => g.id === modal.form.group_id)
+      const selectedSite = sites.find((s) => s.id === modal.form.site_id)
+      const hydratedSaved = {
+        ...saved,
+        group: selectedGroup ?? saved.group,
+        site: selectedSite ?? saved.site,
+      } as Schedule
+
       setLocalSchedules(prev => {
-        const day = saved.day_of_week
+        const day = hydratedSaved.day_of_week
         const existing = prev[day] ?? []
         const updated = modal.form.id
-          ? existing.map(x => x.id === saved.id ? saved : x)
-          : [...existing, saved]
+          ? existing.map(x => x.id === hydratedSaved.id ? hydratedSaved : x)
+          : [...existing, hydratedSaved]
         updated.sort((a, b) => a.start_time.localeCompare(b.start_time))
         return { ...prev, [day]: updated }
       })
@@ -315,14 +338,33 @@ export function PlanningContent({ sites, schedulesByDay, students }: Props) {
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text)]">ID Groupe</label>
-                <input
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Groupe</label>
+                <select
                   value={modal.form.group_id}
-                  onChange={e => setModal(m => ({ ...m, form: { ...m.form, group_id: e.target.value } }))}
-                  placeholder="UUID du groupe"
+                  onChange={e => {
+                    const group = groups.find((g) => g.id === e.target.value)
+                    setModal(m => ({
+                      ...m,
+                      form: {
+                        ...m.form,
+                        group_id: e.target.value,
+                        site_id: group?.site_id ?? m.form.site_id,
+                      },
+                    }))
+                  }}
                   className={inputCls}
-                />
-                <p className="mt-1 text-xs text-[var(--color-text-muted)]">UUID disponible depuis la page Résumés</p>
+                >
+                  <option value="">Choisir un groupe</option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.level?.emoji ? `${group.level.emoji} ` : ''}{group.name}
+                      {group.site?.name ? ` - ${group.site.name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Le site se synchronise automatiquement avec le groupe choisi.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

@@ -74,6 +74,14 @@ export function DashboardContent({
   const overdueCount = invoices.filter((invoice) => invoice.status === 'overdue').length
   const pendingCount = invoices.filter((invoice) => invoice.status === 'pending' || invoice.status === 'partial').length
   const financeFill = totalDue > 0 ? Math.min(100, Math.round((totalPaid / totalDue) * 100)) : 100
+  const setupItems = [
+    { label: 'Sites configures', done: sites.length > 0, href: '/settings/sites' },
+    { label: 'Groupes organises', done: totalGroups > 0, href: '/settings/groups' },
+    { label: 'Eleves renseignes', done: activeOrTrialStudents > 0, href: '/eleves' },
+    { label: 'Planning pret', done: Object.values(schedulesByDay).flat().length > 0, href: '/planning' },
+    { label: 'Finances suivies', done: invoices.length > 0, href: '/finances' },
+  ]
+  const completedSetupCount = setupItems.filter((item) => item.done).length
 
   const siteLoad = sites.map((site) => ({
     site,
@@ -188,6 +196,12 @@ export function DashboardContent({
             </FadeIn>
           ))}
         </section>
+
+        {completedSetupCount < setupItems.length && (
+          <FadeIn delay={70} from="bottom">
+            <SetupCoach items={setupItems} completed={completedSetupCount} total={setupItems.length} />
+          </FadeIn>
+        )}
 
         <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
           <FadeIn delay={80} from="bottom">
@@ -380,6 +394,63 @@ function QuickActionCard({ action }: { action: QuickAction }) {
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
     </Link>
+  )
+}
+
+function SetupCoach({
+  items,
+  completed,
+  total,
+}: {
+  items: Array<{ label: string; done: boolean; href: string }>
+  completed: number
+  total: number
+}) {
+  const percent = Math.round((completed / Math.max(total, 1)) * 100)
+
+  return (
+    <section className="rounded-xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">Assistant premium</p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">Finaliser l'espace Teacher Khati</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Completez les bases une seule fois, puis le dashboard devient vraiment intelligent.
+          </p>
+        </div>
+        <div className="min-w-[140px]">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span>{completed}/{total}</span>
+            <span>{percent}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-background">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-5">
+        {items.map((item) => (
+          <Link
+            key={item.label}
+            href={item.href}
+            className={cn(
+              'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition',
+              item.done
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
+            )}
+          >
+            {item.done ? (
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+            )}
+            <span className="truncate">{item.label}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   )
 }
 

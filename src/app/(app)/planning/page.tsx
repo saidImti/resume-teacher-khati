@@ -11,10 +11,15 @@ export default async function PlanningPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [sites, schedulesByDay, students] = await Promise.all([
+  const [sites, schedulesByDay, students, groupsRes] = await Promise.all([
     getSites(supabase),
     getSchedulesByDay(supabase).catch(() => ({})),
     getStudents(supabase, { status: 'active' }).catch(() => []),
+    supabase
+      .from('groups')
+      .select('*, site:sites(*), level:levels(*)')
+      .eq('is_active', true)
+      .order('name'),
   ])
 
   return (
@@ -22,6 +27,7 @@ export default async function PlanningPage() {
       sites={sites}
       schedulesByDay={schedulesByDay}
       students={students}
+      groups={groupsRes.data ?? []}
     />
   )
 }

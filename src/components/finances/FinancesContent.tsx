@@ -52,6 +52,26 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const totalPaid  = invoices.reduce((s, i) => s + i.amount_paid, 0)
   const totalUnpaid = totalDue - totalPaid
   const overdueCount = invoices.filter(i => i.status === 'overdue').length
+  const financeActions = [
+    {
+      title: 'Tarifs',
+      text: pricingRules.length > 0 ? `${pricingRules.length} regle${pricingRules.length > 1 ? 's' : ''} configuree${pricingRules.length > 1 ? 's' : ''}` : 'Configurer les tarifs par site',
+      done: pricingRules.length > 0,
+      tab: 'tarifs' as const,
+    },
+    {
+      title: 'Factures',
+      text: invoices.length > 0 ? `${invoices.length} facture${invoices.length > 1 ? 's' : ''} suivie${invoices.length > 1 ? 's' : ''}` : 'Preparer le suivi des familles',
+      done: invoices.length > 0,
+      tab: 'factures' as const,
+    },
+    {
+      title: 'Retards',
+      text: overdueCount > 0 ? `${overdueCount} facture${overdueCount > 1 ? 's' : ''} a relancer` : 'Aucun retard critique',
+      done: overdueCount === 0,
+      tab: 'factures' as const,
+    },
+  ]
 
   // Revenus par mois (pour le graphique)
   const monthlyRevenue = useMemo(() => {
@@ -115,6 +135,34 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
       </div>
 
       <div className="mx-auto max-w-7xl w-full px-6 py-6">
+        <div className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">Pilotage financier</p>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Ce qu'il faut surveiller</h2>
+              <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                Un espace premium doit guider les relances, pas seulement afficher des chiffres.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {financeActions.map((item) => (
+                <button
+                  key={item.title}
+                  type="button"
+                  onClick={() => setTab(item.tab)}
+                  className={`rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
+                    item.done
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-amber-200 bg-amber-50 text-amber-800'
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className="mt-1 text-xs opacity-80">{item.text}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ── DASHBOARD ── */}
         {tab === 'dashboard' && (
@@ -138,7 +186,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                 <KpiCard
                   label="En retard"
                   value={`${overdueCount}`}
-                  sub="facture{s} impayée{s}"
+                  sub={overdueCount > 1 ? 'factures impayees' : 'facture impayee'}
                   icon={<AlertCircle className="h-5 w-5" />}
                   color="red"
                 />
