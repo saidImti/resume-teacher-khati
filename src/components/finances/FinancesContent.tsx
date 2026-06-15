@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import {
   Wallet, TrendingUp, AlertCircle, CheckCircle2, Clock,
-  Euro, Receipt,
+  Euro, Receipt, Download,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus } from '@/types'
@@ -100,6 +100,34 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
     })
   }, [invoices, filterStatus, filterSite])
 
+  function exportInvoicesCsv() {
+    const rows = filteredInvoices.map((invoice) => ({
+      famille: invoice.family ? `${invoice.family.parent1_first} ${invoice.family.parent1_last}` : 'Famille inconnue',
+      numero: invoice.invoice_number ?? '',
+      periode: `${invoice.period_month}/${invoice.period_year}`,
+      site: invoice.site?.name ?? '',
+      montant: invoice.amount_due.toFixed(2),
+      paye: invoice.amount_paid.toFixed(2),
+      reste: (invoice.amount_due - invoice.amount_paid).toFixed(2),
+      statut: STATUS_CONFIG[invoice.status]?.label ?? invoice.status,
+    }))
+    const headers = ['famille', 'numero', 'periode', 'site', 'montant', 'paye', 'reste', 'statut']
+    const csv = [
+      headers.join(','),
+      ...rows.map((row) => headers.map((header) => {
+        const value = String(row[header as keyof typeof row] ?? '')
+        return `"${value.replace(/"/g, '""')}"`
+      }).join(',')),
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `factures-${currentYear}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="flex flex-col min-h-screen bg-[var(--color-bg)]">
       {/* Header */}
@@ -161,6 +189,16 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                 </button>
               ))}
             </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={exportInvoicesCsv}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition hover:bg-[var(--color-surface)]"
+            >
+              <Download className="h-4 w-4" />
+              Export factures CSV
+            </button>
           </div>
         </div>
 
