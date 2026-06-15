@@ -211,6 +211,14 @@ ALTER TABLE pricing_rules  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments       ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "families_owner"      ON families;
+DROP POLICY IF EXISTS "students_owner"      ON students;
+DROP POLICY IF EXISTS "enrollments_owner"   ON enrollments;
+DROP POLICY IF EXISTS "schedules_owner"     ON schedules;
+DROP POLICY IF EXISTS "pricing_rules_owner" ON pricing_rules;
+DROP POLICY IF EXISTS "invoices_owner"      ON invoices;
+DROP POLICY IF EXISTS "payments_owner"      ON payments;
+
 CREATE POLICY "families_owner"      ON families      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "students_owner"      ON students      FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "enrollments_owner"   ON enrollments   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
@@ -224,6 +232,13 @@ CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS families_updated_at      ON families;
+DROP TRIGGER IF EXISTS students_updated_at      ON students;
+DROP TRIGGER IF EXISTS enrollments_updated_at   ON enrollments;
+DROP TRIGGER IF EXISTS schedules_updated_at     ON schedules;
+DROP TRIGGER IF EXISTS pricing_rules_updated_at ON pricing_rules;
+DROP TRIGGER IF EXISTS invoices_updated_at      ON invoices;
 
 CREATE TRIGGER families_updated_at      BEFORE UPDATE ON families      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER students_updated_at      BEFORE UPDATE ON students      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

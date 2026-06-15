@@ -4,6 +4,7 @@
  */
 import { createClient } from '@supabase/supabase-js'
 import { createHash, randomBytes } from 'crypto'
+import { getAdminSupabaseEnv } from '@/lib/supabase/env'
 
 // ── Constantes ────────────────────────────────────────────────
 const KEY_PREFIX = 'rtk_'   // "résumé teacher khati"
@@ -35,9 +36,11 @@ export async function validateApiKey(key: string): Promise<{
 
   const hash = hashApiKey(key)
 
+  const { url, serviceRoleKey } = getAdminSupabaseEnv()
+
   const admin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    url,
+    serviceRoleKey,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 

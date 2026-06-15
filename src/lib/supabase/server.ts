@@ -1,48 +1,38 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
+import type { Database } from '@/types/supabase'
+import { getAdminSupabaseEnv, getPublicSupabaseEnv } from './env'
 
-// Client Supabase côté serveur (Server Components, API Routes, Actions)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function createServerSupabaseClient(): Promise<ReturnType<typeof createServerClient<any>>> {
+export async function createServerSupabaseClient(): Promise<ReturnType<typeof createServerClient<Database>>> {
   const cookieStore = await cookies()
+  const { url, anonKey } = getPublicSupabaseEnv()
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServerClient<any>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // Ignoré en Server Components read-only
-          }
-        },
+  return createServerClient<Database>(url, anonKey, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll()
       },
-    }
-  )
+      setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options)
+          )
+        } catch {
+          // Server Components can read cookies but cannot always write them.
+        }
+      },
+    },
+  })
 }
 
-// Client admin avec service role (pour les opérations sensibles)
 export function createAdminSupabaseClient() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { createClient } = require('@supabase/supabase-js')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
-  )
+  const { url, serviceRoleKey } = getAdminSupabaseEnv()
+
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
 }

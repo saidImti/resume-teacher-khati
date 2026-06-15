@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { getPublicSupabaseEnv } from '@/lib/supabase/env'
 
 const PUBLIC_ROUTES = [
   '/auth/login',
@@ -10,16 +11,16 @@ const PUBLIC_ROUTES = [
 
 // Routes API publiques (pas d'auth requise)
 const PUBLIC_API_ROUTES = [
-  '/api/setup',
   '/api/whatsapp/webhook',
 ]
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
+  const { url, anonKey } = getPublicSupabaseEnv()
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    anonKey,
     {
       cookies: {
         getAll() {
