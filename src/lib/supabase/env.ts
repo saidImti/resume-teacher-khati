@@ -17,6 +17,16 @@ function requiredEnv(name: string): string {
   return value
 }
 
+function requiredValue(name: string, value: string | undefined): string {
+  const trimmed = value?.trim()
+
+  if (!trimmed) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+
+  return trimmed
+}
+
 function normalizeSupabaseUrl(rawUrl: string): string {
   const url = rawUrl.trim().replace(/\/+$/, '')
 
@@ -86,8 +96,13 @@ function assertServiceRoleKey(key: string, url: string): void {
 }
 
 export function getPublicSupabaseEnv(): PublicSupabaseEnv {
-  const url = normalizeSupabaseUrl(requiredEnv('NEXT_PUBLIC_SUPABASE_URL'))
-  const anonKey = requiredEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  const url = normalizeSupabaseUrl(
+    requiredValue('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL)
+  )
+  const anonKey = requiredValue(
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
 
   assertBrowserKey(anonKey, url)
 
