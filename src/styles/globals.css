@@ -82,6 +82,44 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
+  select,
+  input,
+  textarea {
+    color-scheme: light;
+  }
+
+  .dark select,
+  .dark input,
+  .dark textarea {
+    color-scheme: dark;
+  }
+
+  select option,
+  select optgroup {
+    background-color: #ffffff;
+    color: #0f172a;
+  }
+
+  select option:checked {
+    background-color: #ede9fe;
+    color: #4c1d95;
+  }
+
+  .dark select option,
+  .dark select optgroup {
+    background-color: #020617;
+    color: #f8fafc;
+  }
+
+  .dark select option:checked {
+    background-color: #6d28d9;
+    color: #ffffff;
+  }
+
+  select option:disabled {
+    color: #64748b;
+  }
+
   /* Scrollbar premium */
   ::-webkit-scrollbar {
     width: 6px;

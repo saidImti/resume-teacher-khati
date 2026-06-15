@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getStudentById, getStudents } from '@/lib/supabase/queries'
 import { StudentForm } from '@/components/eleves/StudentForm'
 import type { Family } from '@/types'
@@ -18,8 +18,9 @@ export default async function EditStudentPage({ params }: Props) {
   try { student = await getStudentById(supabase, id) }
   catch { notFound() }
 
+  const admin = createAdminSupabaseClient()
   const [sites, levels, students] = await Promise.all([
-    getSites(supabase), getLevels(supabase), getStudents(supabase),
+    getSites(admin), getLevels(admin), getStudents(supabase),
   ])
 
   const families = Array.from(

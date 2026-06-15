@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getStudents } from '@/lib/supabase/queries'
 import { StudentForm } from '@/components/eleves/StudentForm'
 
@@ -11,9 +11,10 @@ export default async function NewStudentPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
+  const admin = createAdminSupabaseClient()
   const [sites, levels, students] = await Promise.all([
-    getSites(supabase),
-    getLevels(supabase),
+    getSites(admin),
+    getLevels(admin),
     getStudents(supabase),
   ])
 
