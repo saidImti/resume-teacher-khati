@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { FileText, Pencil, Plus } from 'lucide-react'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { ArchiveGroupButton } from '@/components/groups/ArchiveGroupButton'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -43,17 +43,17 @@ export default async function GroupsSettingsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Gestion des groupes</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {totalGroups} groupe{totalGroups !== 1 ? 's' : ''} actif{totalGroups !== 1 ? 's' : ''}
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Organisation ecole</p>
+          <h2 className="mt-1 text-xl font-semibold text-foreground">Gestion des groupes</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {totalGroups} groupe{totalGroups !== 1 ? 's' : ''} actif{totalGroups !== 1 ? 's' : ''}. Cree, modifie et archive les groupes par site.
           </p>
         </div>
         <Link
           href="/settings/groups/new"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground
-            text-sm font-medium hover:bg-primary/90 transition-colors active:scale-[0.97]"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.97]"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           Nouveau groupe
@@ -64,8 +64,8 @@ export default async function GroupsSettingsPage() {
         <EmptyState
           illustration="groups"
           title="Aucun groupe pour l'instant"
-          description="Créez votre premier groupe pour commencer à organiser vos cours et générer des résumés pour les parents."
-          action={{ label: 'Créer un groupe', href: '/settings/groups/new' }}
+          description="Cree ton premier groupe pour organiser les cours et generer les resumes pour les parents."
+          action={{ label: 'Creer un groupe', href: '/settings/groups/new' }}
           secondaryAction={{ label: 'Configurer les sites', href: '/settings/sites', variant: 'secondary' }}
         />
       ) : (
@@ -79,29 +79,36 @@ export default async function GroupsSettingsPage() {
   )
 }
 
-// ─── Site Section ─────────────────────────────────────────────────────────────
-
 function SiteSection({ site, groups }: { site: Site; groups: GroupWithRelations[] }) {
   return (
-    <section>
-      <div className="flex items-center gap-2 mb-3">
-        <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: site.color ?? '#6366f1' }} />
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">{site.name}</h2>
-        <span className="text-xs text-muted-foreground">
-          ({groups.length} groupe{groups.length !== 1 ? 's' : ''})
-        </span>
+    <section className="rounded-2xl border border-border bg-card/50 p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: site.color ?? '#6366f1' }} />
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground">{site.name}</h2>
+          <span className="text-xs text-muted-foreground">
+            {groups.length} groupe{groups.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <Link
+          href={`/settings/groups/new?siteId=${site.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-accent"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Ajouter ici
+        </Link>
       </div>
 
       {groups.length === 0 ? (
         <EmptyState
           illustration="groups"
           size="sm"
-          title={`Aucun groupe à ${site.name}`}
+          title={`Aucun groupe a ${site.name}`}
           description="Ce site n'a pas encore de groupe."
-          action={{ label: 'Créer un groupe', href: `/settings/groups/new?siteId=${site.id}` }}
+          action={{ label: 'Creer un groupe', href: `/settings/groups/new?siteId=${site.id}` }}
         />
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3">
           {groups.map((group) => (
             <GroupRow key={group.id} group={group} />
           ))}
@@ -111,47 +118,46 @@ function SiteSection({ site, groups }: { site: Site; groups: GroupWithRelations[
   )
 }
 
-// ─── Group Row ────────────────────────────────────────────────────────────────
-
 function GroupRow({ group }: { group: GroupWithRelations }) {
   const dayLabel = group.day_of_week !== null
     ? ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][group.day_of_week] ?? ''
     : null
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-border
-      bg-card hover:bg-accent/40 transition-colors group/row">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="text-lg shrink-0" aria-hidden="true">{group.level?.emoji ?? '📚'}</span>
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-background px-4 py-3 transition-colors hover:bg-accent/40 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="shrink-0 text-lg" aria-hidden="true">{group.level?.emoji ?? 'G'}</span>
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{group.name}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{group.name}</p>
           <p className="text-xs text-muted-foreground">
             {group.level?.name}
             {dayLabel && (
               <span className="ml-1.5 text-muted-foreground/70">
-                · {dayLabel}{group.time_slot ? ` ${group.time_slot}` : ''}
+                - {dayLabel}{group.time_slot ? ` ${group.time_slot}` : ''}
               </span>
             )}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-1 ml-2 shrink-0">
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <Link
           href={`/resumes/new?groupId=${group.id}`}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-          title="Nouveau résumé"
-          aria-label={`Nouveau résumé pour ${group.name}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-50"
+          title="Nouveau resume"
+          aria-label={`Nouveau resume pour ${group.name}`}
         >
-          <span aria-hidden="true">✨</span>
+          <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+          Resume
         </Link>
         <Link
           href={`/settings/groups/${group.id}/edit`}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 py-1.5 text-xs font-semibold text-foreground transition hover:bg-accent"
           title="Modifier ce groupe"
           aria-label={`Modifier ${group.name}`}
         >
-          <span aria-hidden="true">✏️</span>
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+          Modifier
         </Link>
         <ArchiveGroupButton groupId={group.id} groupName={group.name} />
       </div>

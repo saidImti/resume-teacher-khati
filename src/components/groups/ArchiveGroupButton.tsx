@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { Archive, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface ArchiveGroupButtonProps {
@@ -14,19 +15,19 @@ export function ArchiveGroupButton({ groupId, groupName }: ArchiveGroupButtonPro
   const router = useRouter()
 
   async function handleArchive() {
-    if (!confirm(`Archiver le groupe "${groupName}" ?\n\nIl n'apparaîtra plus dans la liste.`)) return
+    if (!confirm(`Archiver le groupe "${groupName}" ?\n\nIl ne sera plus affiche dans la liste active.`)) return
 
     setIsArchiving(true)
     try {
       const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' })
       if (!res.ok) {
-        toast.error('Erreur lors de l\'archivage')
+        toast.error("Erreur lors de l'archivage")
         return
       }
-      toast.success(`Groupe "${groupName}" archivé`)
+      toast.success(`Groupe "${groupName}" archive`)
       router.refresh()
     } catch {
-      toast.error('Erreur réseau')
+      toast.error('Erreur reseau')
     } finally {
       setIsArchiving(false)
     }
@@ -34,13 +35,14 @@ export function ArchiveGroupButton({ groupId, groupName }: ArchiveGroupButtonPro
 
   return (
     <button
+      type="button"
       onClick={handleArchive}
       disabled={isArchiving}
       title={`Archiver "${groupName}"`}
-      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10
-        transition text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
     >
-      {isArchiving ? '⏳' : '🗃️'}
+      {isArchiving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+      Archiver
     </button>
   )
 }

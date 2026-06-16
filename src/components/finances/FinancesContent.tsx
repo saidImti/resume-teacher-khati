@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import {
   Wallet, TrendingUp, AlertCircle, CheckCircle2, Clock,
-  Euro, Receipt, Download, Plus, Save, Users,
+  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
@@ -74,6 +74,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const [localFamilies, setLocalFamilies] = useState(families)
   const [savingPricing, setSavingPricing] = useState(false)
   const [savingFamilyRate, setSavingFamilyRate] = useState(false)
+  const [clearingFamilyRateId, setClearingFamilyRateId] = useState<string | null>(null)
   const [pricingForm, setPricingForm] = useState<PricingForm>({
     site_id: sites[0]?.id ?? '',
     name: `Tarif ${sites[0]?.name ?? 'site'} ${currentYear}`,
@@ -101,6 +102,26 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const totalPaid  = invoices.reduce((s, i) => s + i.amount_paid, 0)
   const totalUnpaid = totalDue - totalPaid
   const overdueCount = invoices.filter(i => i.status === 'overdue').length
+  const specialRateFamilies = useMemo(() => {
+    return localFamilies
+      .filter((family) => family.custom_monthly_rate !== null && family.custom_monthly_rate !== undefined)
+      .sort((a, b) => {
+        const siteA = sites.find((site) => site.id === a.primary_site_id)?.name ?? ''
+        const siteB = sites.find((site) => site.id === b.primary_site_id)?.name ?? ''
+        return siteA.localeCompare(siteB) || a.parent1_last.localeCompare(b.parent1_last)
+      })
+  }, [localFamilies, sites])
+  const activeRuleBySite = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]!
+    const map = new Map<string, PricingRule>()
+    localPricingRules
+      .filter((rule) => rule.is_active && rule.effective_from <= today && (!rule.effective_until || rule.effective_until >= today))
+      .sort((a, b) => b.effective_from.localeCompare(a.effective_from))
+      .forEach((rule) => {
+        if (!map.has(rule.site_id)) map.set(rule.site_id, rule)
+      })
+    return map
+  }, [localPricingRules])
   const financeActions = [
     {
       title: 'Tarifs',
@@ -247,6 +268,36 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
       custom_monthly_rate: family?.custom_monthly_rate?.toString() ?? '',
       custom_rate_note: family?.custom_rate_note ?? '',
     })
+  }
+
+  async function clearFamilyRate(family: Family) {
+    if (!confirm(`Retirer le tarif special de ${family.parent1_first} ${family.parent1_last} ?\n\nCette famille repassera au tarif normal de son site.`)) return
+    setClearingFamilyRateId(family.id)
+    try {
+      const res = await fetch(`/api/families/${family.id}/rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primary_site_id: family.primary_site_id,
+          custom_monthly_rate: null,
+          custom_rate_note: null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Impossible de retirer le tarif famille')
+      setLocalFamilies((current) => current.map((item) => item.id === data.id ? data as Family : item))
+      if (familyRateForm.family_id === family.id) {
+        setFamilyRateForm((current) => ({
+          ...current,
+          custom_monthly_rate: '',
+          custom_rate_note: '',
+        }))
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur lors du retrait du tarif famille')
+    } finally {
+      setClearingFamilyRateId(null)
+    }
   }
 
   return (
@@ -682,9 +733,90 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
 
                   <button type="submit" disabled={savingFamilyRate || !familyRateForm.family_id} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60">
                     <Users className="h-4 w-4" />
-                    {savingFamilyRate ? 'Enregistrement...' : 'Enregistrer la famille'}
+                    {savingFamilyRate ? 'Enregistrement...' : 'Appliquer le tarif special'}
                   </button>
                 </form>
+              </div>
+            </FadeIn>
+
+            <FadeIn delay={0.04}>
+              <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-6">
+                <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">Registre solidaire</p>
+                    <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Tarifs personnalises appliques</h2>
+                    <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">
+                      Seules les familles listees ici beneficient de leur montant special. Toutes les autres restent au tarif normal du site concerne.
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-violet-200 bg-white px-4 py-3 text-right">
+                    <p className="text-2xl font-bold text-violet-700">{specialRateFamilies.length}</p>
+                    <p className="text-xs font-medium text-violet-700">famille{specialRateFamilies.length > 1 ? 's' : ''} avec tarif special</p>
+                  </div>
+                </div>
+
+                {specialRateFamilies.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-violet-200 bg-white/70 p-5 text-sm text-[var(--color-text-muted)]">
+                    Aucun tarif personnalise pour le moment. Choisis une famille, indique le montant mensuel et elle apparaitra ici.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-violet-200 bg-white">
+                    <div className="grid grid-cols-[1.25fr_0.9fr_0.8fr_1.2fr_0.75fr] gap-3 border-b border-violet-100 bg-violet-100/70 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-violet-800">
+                      <span>Famille</span>
+                      <span>Site applique</span>
+                      <span>Tarif special</span>
+                      <span>Note interne</span>
+                      <span className="text-right">Actions</span>
+                    </div>
+                    <div className="divide-y divide-violet-100">
+                      {specialRateFamilies.map((family) => {
+                        const site = sites.find((item) => item.id === family.primary_site_id)
+                        const childrenCount = family.students?.filter((student) => student.status !== 'departed').length ?? 0
+                        const normalRule = family.primary_site_id ? activeRuleBySite.get(family.primary_site_id) : null
+                        const normalAmount = normalRule ? computeMonthlyAmount(normalRule, Math.max(childrenCount, 1)) : null
+                        return (
+                          <div key={family.id} className="grid grid-cols-[1.25fr_0.9fr_0.8fr_1.2fr_0.75fr] items-center gap-3 px-4 py-3 text-sm">
+                            <div>
+                              <p className="font-semibold text-[var(--color-text)]">{family.parent1_first} {family.parent1_last}</p>
+                              <p className="text-xs text-[var(--color-text-muted)]">{childrenCount} enfant{childrenCount > 1 ? 's' : ''} rattache{childrenCount > 1 ? 's' : ''}</p>
+                            </div>
+                            <div>
+                              <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                                {site?.name ?? 'Site non defini'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-base font-bold text-violet-700">{Number(family.custom_monthly_rate).toFixed(2)} EUR/mois</p>
+                              {normalAmount !== null && (
+                                <p className="text-xs text-[var(--color-text-muted)]">normal: {normalAmount.toFixed(0)} EUR/mois</p>
+                              )}
+                            </div>
+                            <p className="line-clamp-2 text-xs text-[var(--color-text-muted)]">{family.custom_rate_note || 'Aucune note'}</p>
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => selectFamilyForRate(family.id)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                                Modifier
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => clearFamilyRate(family)}
+                                disabled={clearingFamilyRateId === family.id}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                Retirer
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </FadeIn>
 
