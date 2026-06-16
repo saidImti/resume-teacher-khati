@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/Header'
 import { GroupForm } from '@/components/groups/GroupForm'
 import type { Group, Site, Level, AcademicYear } from '@/types'
@@ -13,18 +13,19 @@ export default async function EditGroupPage({ params }: PageProps) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const { id } = await params
 
   const [groupRes, sitesRes, levelsRes, yearsRes] = await Promise.all([
-    supabase
+    admin
       .from('groups')
       .select('*, site:sites(*), level:levels(*), academic_year:academic_years(*)')
       .eq('id', id)
       .single(),
-    supabase.from('sites').select('*').eq('is_active', true).order('name'),
-    supabase.from('levels').select('*').order('sort_order'),
-    supabase.from('academic_years').select('*').order('start_date', { ascending: false }),
+    admin.from('sites').select('*').eq('is_active', true).order('name'),
+    admin.from('levels').select('*').order('sort_order'),
+    admin.from('academic_years').select('*').order('start_date', { ascending: false }),
   ])
 
   if (groupRes.error || !groupRes.data) notFound()

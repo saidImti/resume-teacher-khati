@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getGroupsBySite, getActiveAcademicYear } from '@/lib/supabase/queries'
 import { Header } from '@/components/layout/Header'
 import { PadletPageLayout } from '@/components/padlet/PadletPageLayout'
@@ -12,11 +12,12 @@ export default async function MesPadletsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const [sites, levels, academicYear] = await Promise.all([
-    getSites(supabase),
-    getLevels(supabase),
-    getActiveAcademicYear(supabase).catch(() => null),
+    getSites(admin),
+    getLevels(admin),
+    getActiveAcademicYear(admin).catch(() => null),
   ])
 
   interface GroupWithLevel extends Group { level?: Level }
@@ -28,7 +29,7 @@ export default async function MesPadletsPage() {
 
   for (const site of sites) {
     const groups: GroupWithLevel[] = academicYear
-      ? (await getGroupsBySite(supabase, site.id, academicYear.id)).map((g) => ({
+      ? (await getGroupsBySite(admin, site.id, academicYear.id)).map((g) => ({
           ...g, level: levels.find((l) => l.id === g.level_id),
         }))
       : []

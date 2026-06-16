@@ -61,11 +61,6 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
   }), [students, search, filterSite, filterStatus, filterLevel])
 
   const followUpCount = s.trial + s.suspended
-  const visibleSiteStats = sites.slice(0, 2).map((site) => ({
-    site,
-    count: s.bySite.find((entry) => entry.site.id === site.id)?.active ?? 0,
-  }))
-
   function exportStudentsCsv() {
     const rows = filtered.map((student) => ({
       prenom: student.first_name,
@@ -158,7 +153,7 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
         </FadeIn>
 
         <FadeIn>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-3">
             <KpiCard
               label="Eleves actifs"
               value={s.active + s.trial}
@@ -166,25 +161,13 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
               icon={<Users className="h-5 w-5" />}
               color="violet"
             />
-            {visibleSiteStats.map(({ site, count }, index) => (
-              <KpiCard
-                key={site.id}
-                label={site.name}
-                value={count}
-                sub="eleves actifs"
-                icon={<MapPin className="h-5 w-5" />}
-                color={index === 0 ? 'blue' : 'indigo'}
-              />
-            ))}
-            {visibleSiteStats.length === 0 && (
-              <KpiCard
-                label="Sites"
-                value={0}
-                sub="a configurer"
-                icon={<MapPin className="h-5 w-5" />}
-                color="blue"
-              />
-            )}
+            <KpiCard
+              label="Sites"
+              value={sites.length}
+              sub={sites.length > 0 ? 'configures' : 'a configurer'}
+              icon={<MapPin className="h-5 w-5" />}
+              color="blue"
+            />
             <KpiCard
               label="Departs"
               value={s.departed}
@@ -361,13 +344,15 @@ function KpiCard({
     slate: 'bg-slate-100 text-slate-500',
   }
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-      <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl ${colors[color]}`}>
+    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+      <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors[color]}`}>
         {icon}
       </div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
-      <p className="mt-0.5 text-sm font-medium text-foreground">{label}</p>
-      <p className="text-xs text-muted-foreground">{sub}</p>
+      <div className="min-w-0">
+        <p className="text-2xl font-bold leading-none text-foreground">{value}</p>
+        <p className="mt-1 text-sm font-medium leading-tight text-foreground">{label}</p>
+        <p className="text-xs leading-tight text-muted-foreground">{sub}</p>
+      </div>
     </div>
   )
 }

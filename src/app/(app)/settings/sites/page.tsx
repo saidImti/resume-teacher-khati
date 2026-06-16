@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { SitesManager } from './SitesManager'
 import type { Site } from '@/types'
 
@@ -7,8 +7,9 @@ export default async function SitesSettingsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
-  const { data: sites } = await supabase
+  const { data: sites } = await admin
     .from('sites')
     .select('*')
     .order('name')

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/Header'
 import { GroupForm } from '@/components/groups/GroupForm'
 import type { Site, Level, AcademicYear } from '@/types'
@@ -13,13 +13,14 @@ export default async function NewGroupPage({ searchParams }: PageProps) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const { siteId } = await searchParams
 
   const [sitesRes, levelsRes, yearsRes] = await Promise.all([
-    supabase.from('sites').select('*').eq('is_active', true).order('name'),
-    supabase.from('levels').select('*').order('sort_order'),
-    supabase.from('academic_years').select('*').order('start_date', { ascending: false }),
+    admin.from('sites').select('*').eq('is_active', true).order('name'),
+    admin.from('levels').select('*').order('sort_order'),
+    admin.from('academic_years').select('*').order('start_date', { ascending: false }),
   ])
 
   const sites = (sitesRes.data ?? []) as Site[]

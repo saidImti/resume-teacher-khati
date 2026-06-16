@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getGroupsBySite, getActiveAcademicYear } from '@/lib/supabase/queries'
 import { Header } from '@/components/layout/Header'
 import { ResumeWizard } from '@/components/resume/ResumeWizard'
@@ -17,14 +17,15 @@ export default async function NewResumePage({ searchParams }: PageProps) {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const params = await searchParams
 
   // Chargement des données en parallèle
   const [sites, levels, academicYear] = await Promise.all([
-    getSites(supabase),
-    getLevels(supabase),
-    getActiveAcademicYear(supabase).catch(() => null),
+    getSites(admin),
+    getLevels(admin),
+    getActiveAcademicYear(admin).catch(() => null),
   ])
 
   // Groupes par site avec enrichissement du niveau
@@ -40,7 +41,7 @@ export default async function NewResumePage({ searchParams }: PageProps) {
 
   for (const site of sites) {
     const groups = academicYear
-      ? await getGroupsBySite(supabase, site.id, academicYear.id)
+      ? await getGroupsBySite(admin, site.id, academicYear.id)
       : []
 
     const enrichedGroups: GroupWithLevel[] = groups.map((group) => ({

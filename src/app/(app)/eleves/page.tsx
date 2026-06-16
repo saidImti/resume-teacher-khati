@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getStudents, getStudentStats } from '@/lib/supabase/queries'
 import { ElevesContent } from '@/components/eleves/ElevesContent'
 
@@ -10,12 +10,13 @@ export default async function ElevesPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const [sites, levels, students, stats] = await Promise.all([
-    getSites(supabase),
-    getLevels(supabase),
-    getStudents(supabase).catch(() => []),
-    getStudentStats(supabase).catch(() => null),
+    getSites(admin),
+    getLevels(admin),
+    getStudents(admin).catch(() => []),
+    getStudentStats(admin).catch(() => null),
   ])
 
   return (

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Archive, CheckCircle2, Clock3, FileText, Search, Send, Sparkles } from 'lucide-react'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/Header'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { FadeIn } from '@/components/ui/FadeIn'
@@ -43,18 +43,19 @@ export default async function ArchivesPage({ searchParams }: PageProps) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   const filters = await searchParams
 
   const [sitesRes, levelsRes] = await Promise.all([
-    supabase.from('sites').select('*').eq('is_active', true).order('name'),
-    supabase.from('levels').select('*').order('sort_order'),
+    admin.from('sites').select('*').eq('is_active', true).order('name'),
+    admin.from('levels').select('*').order('sort_order'),
   ])
 
   const sites = (sitesRes.data ?? []) as Site[]
   const levels = (levelsRes.data ?? []) as Level[]
 
-  let query = supabase
+  let query = admin
     .from('resumes')
     .select(`
       id,

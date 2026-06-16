@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Plus } from 'lucide-react'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { ArchiveGroupButton } from '@/components/groups/ArchiveGroupButton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { Group, Site, Level } from '@/types'
@@ -20,14 +20,15 @@ export default async function GroupsSettingsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
-  const { data: groups } = await supabase
+  const { data: groups } = await admin
     .from('groups')
     .select('*, site:sites(*), level:levels(*)')
     .eq('is_active', true)
     .order('name')
 
-  const { data: sites } = await supabase
+  const { data: sites } = await admin
     .from('sites')
     .select('*')
     .eq('is_active', true)
