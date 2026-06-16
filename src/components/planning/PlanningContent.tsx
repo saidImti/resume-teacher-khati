@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Calendar, Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2 } from 'lucide-react'
+import { Calendar, Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2, Copy } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { upsertSchedule, deleteSchedule } from '@/lib/supabase/queries'
 import { DAY_LABELS } from '@/types'
@@ -22,6 +22,7 @@ interface GroupWithRelations extends Group {
 }
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const
+const VISIBLE_LEVELS = ['Preschoolers', 'Kids', 'Juniors', 'Tweens', 'Teenagers']
 
 interface SlotForm {
   id?: string
@@ -80,9 +81,17 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
   }, [localSchedules, filterSite])
 
   const totalSlots = Object.values(filtered).flat().length
+  const groupsForSelectedSite = groups.filter((group) => {
+    const levelName = group.level?.name ?? group.name
+    return (!modal.form.site_id || group.site_id === modal.form.site_id) && VISIBLE_LEVELS.includes(levelName)
+  })
 
   function openNew(day: number) {
-    const firstGroup = groups[0]
+    const preferredSiteId = filterSite !== 'all' ? filterSite : sites[0]?.id ?? ''
+    const firstGroup = groups.find((group) => {
+      const levelName = group.level?.name ?? group.name
+      return group.site_id === preferredSiteId && VISIBLE_LEVELS.includes(levelName)
+    }) ?? groups[0]
     setModal({
       open: true,
       form: {
@@ -99,6 +108,22 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
       open: true,
       form: {
         id: s.id,
+        site_id: s.site_id,
+        group_id: s.group_id,
+        day_of_week: s.day_of_week,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        room: s.room ?? '',
+        max_students: s.max_students,
+        notes: s.notes ?? '',
+      },
+    })
+  }
+
+  function openDuplicate(s: Schedule) {
+    setModal({
+      open: true,
+      form: {
         site_id: s.site_id,
         group_id: s.group_id,
         day_of_week: s.day_of_week,
@@ -168,7 +193,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
     }
   }
 
-  const inputCls = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-colors'
+  const inputCls = 'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-colors'
 
   return (
     <div className="flex flex-col min-h-screen bg-[var(--color-bg)]">
@@ -286,8 +311,16 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                           <div key={slot.id} className={`group relative rounded-xl border p-2.5 ${colorCls}`}>
                             <div className="absolute right-1.5 top-1.5 hidden gap-0.5 group-hover:flex">
                               <button
+                                onClick={() => openDuplicate(slot)}
+                                className="rounded p-1 hover:bg-white/60 transition-colors"
+                                title="Dupliquer"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                              <button
                                 onClick={() => openEdit(slot)}
                                 className="rounded p-1 hover:bg-white/60 transition-colors"
+                                title="Modifier"
                               >
                                 <Pencil className="h-3 w-3" />
                               </button>
@@ -309,7 +342,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                             </div>
                             {slot.group && (
                               <p className="text-xs font-medium leading-tight">
-                                {slot.group.level?.emoji} {slot.group.name}
+                                {slot.group.level?.emoji} {slot.group.level?.name ?? slot.group.name}
                               </p>
                             )}
                             {slot.room && (
@@ -334,20 +367,20 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
 
       {/* Modal */}
       {modal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-6 py-4">
-              <h2 className="text-base font-semibold text-[var(--color-text)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4">
+          <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-background shadow-2xl ring-1 ring-white/10">
+            <div className="flex items-start justify-between border-b border-border bg-gradient-to-r from-blue-600 to-violet-600 px-6 py-5 text-white">
+              <h2 className="text-lg font-bold text-white">
                 {modal.form.id ? 'Modifier le créneau' : 'Nouveau créneau'}
               </h2>
               <button
                 onClick={() => setModal({ open: false, form: EMPTY_FORM })}
-                className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] transition-colors"
+                className="rounded-lg p-1.5 text-white/85 transition-colors hover:bg-white/15"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="space-y-4 p-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Jour</label>
@@ -363,7 +396,21 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                   <label className="mb-1.5 block text-sm font-medium text-[var(--color-text)]">Site</label>
                   <select
                     value={modal.form.site_id}
-                    onChange={e => setModal(m => ({ ...m, form: { ...m.form, site_id: e.target.value } }))}
+                    onChange={e => {
+                      const nextSiteId = e.target.value
+                      const nextGroup = groups.find((group) => {
+                        const levelName = group.level?.name ?? group.name
+                        return group.site_id === nextSiteId && VISIBLE_LEVELS.includes(levelName)
+                      })
+                      setModal(m => ({
+                        ...m,
+                        form: {
+                          ...m.form,
+                          site_id: nextSiteId,
+                          group_id: nextGroup?.id ?? '',
+                        },
+                      }))
+                    }}
                     className={inputCls}
                   >
                     <option value="">— Site —</option>
@@ -388,16 +435,15 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                   }}
                   className={inputCls}
                 >
-                  <option value="">Choisir un groupe</option>
-                  {groups.map((group) => (
+                  <option value="">Choisir un niveau</option>
+                  {groupsForSelectedSite.map((group) => (
                     <option key={group.id} value={group.id}>
-                      {group.level?.emoji ? `${group.level.emoji} ` : ''}{group.name}
-                      {group.site?.name ? ` - ${group.site.name}` : ''}
+                      {group.level?.emoji ? `${group.level.emoji} ` : ''}{group.level?.name ?? group.name}
                     </option>
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                  Le site se synchronise automatiquement avec le groupe choisi.
+                  Le site choisi filtre les niveaux disponibles.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
