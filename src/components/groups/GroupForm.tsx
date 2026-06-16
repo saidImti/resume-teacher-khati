@@ -103,8 +103,8 @@ export function GroupForm({
       toast.success(mode === 'create' ? 'Groupe créé ✓' : 'Groupe mis à jour ✓')
       router.push('/settings/groups')
       router.refresh()
-    } catch {
-      toast.error('Erreur réseau')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur réseau')
     } finally {
       setIsSubmitting(false)
     }

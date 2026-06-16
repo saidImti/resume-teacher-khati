@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-
-// ─── Schema création ─────────────────────────────────────────────────────────
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1, 'Nom requis').max(100),
@@ -14,8 +12,6 @@ const CreateGroupSchema = z.object({
   max_students: z.number().int().min(1).max(50).optional(),
 })
 
-// ─── GET /api/groups ──────────────────────────────────────────────────────────
-
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -25,8 +21,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const siteId = searchParams.get('siteId')
     const academicYearId = searchParams.get('academicYearId')
+    const admin = createAdminSupabaseClient()
 
-    let query = supabase
+    let query = admin
       .from('groups')
       .select('*, level:levels(*), site:sites(*)')
       .order('name')
@@ -39,11 +36,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data)
   } catch (error) {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { status: 500 }
+    )
   }
 }
-
-// ─── POST /api/groups ─────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
@@ -51,9 +49,7 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
-    const body = await request.json()
-    const parsed = CreateGroupSchema.safeParse(body)
-
+    const parsed = CreateGroupSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Données invalides', details: parsed.error.flatten() },
@@ -61,32 +57,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Générer le slug depuis le nom
-    const slug = parsed.data.name
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-
-    const { data, error } = await supabase
+    const admin = createAdminSupabaseClient()
+    const { data, error } = await admin
       .from('groups')
-      .insert({ ...parsed.data, slug, created_by: user.id })
+      .insert({
+        name: parsed.data.name,
+        site_id: parsed.data.site_id,
+        level_id: parsed.data.level_id,
+        academic_year_id: parsed.data.academic_year_id,
+        day_of_week: parsed.data.day_of_week ?? null,
+        time_slot: parsed.data.time_slot || null,
+        max_students: parsed.data.max_students ?? 12,
+        is_active: true,
+      })
       .select('*, level:levels(*), site:sites(*)')
       .single()
 
     if (error) {
       if (error.code === '23505') {
         return NextResponse.json(
-          { error: 'Un groupe avec ce nom existe déjà sur ce site' },
+          { error: 'Un groupe avec ce nom existe déjà sur ce site, ce niveau et cette année.' },
           { status: 409 }
         )
       }
-      throw error
+      return NextResponse.json(
+        { error: error.message || 'Impossible de créer le groupe', details: error },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json(data, { status: 201 })
   } catch (error) {
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { status: 500 }
+    )
   }
 }

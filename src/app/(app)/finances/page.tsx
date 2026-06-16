@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
-import { getSites, getPricingRules, getInvoices, getRevenueStats } from '@/lib/supabase/queries'
+import { getSites, getPricingRules, getInvoices, getRevenueStats, getFamilies } from '@/lib/supabase/queries'
 import { FinancesContent } from '@/components/finances/FinancesContent'
 
 export const metadata: Metadata = { title: 'Finances' }
@@ -14,11 +14,12 @@ export default async function FinancesPage() {
 
   const currentYear = new Date().getFullYear()
 
-  const [sites, pricingRules, invoices, revenueStats] = await Promise.all([
+  const [sites, pricingRules, invoices, revenueStats, families] = await Promise.all([
     getSites(admin),
     getPricingRules(admin).catch(() => []),
     getInvoices(admin).catch(() => []),
     getRevenueStats(admin, currentYear).catch(() => []),
+    getFamilies(admin).catch(() => []),
   ])
 
   return (
@@ -28,6 +29,7 @@ export default async function FinancesPage() {
       invoices={invoices}
       revenueStats={revenueStats}
       currentYear={currentYear}
+      families={families}
     />
   )
 }

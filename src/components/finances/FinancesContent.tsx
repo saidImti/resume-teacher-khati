@@ -3,10 +3,10 @@
 import { useState, useMemo } from 'react'
 import {
   Wallet, TrendingUp, AlertCircle, CheckCircle2, Clock,
-  Euro, Receipt, Download,
+  Euro, Receipt, Download, Plus, Save, Users,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
-import type { Site, PricingRule, Invoice, InvoiceStatus } from '@/types'
+import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 
 interface RevenueRow {
@@ -23,6 +23,7 @@ interface Props {
   invoices: Invoice[]
   revenueStats: RevenueRow[]
   currentYear: number
+  families: Family[]
 }
 
 const STATUS_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
@@ -42,10 +43,58 @@ const BILLING_LABELS: Record<string, string> = {
   monthly_family:    'Mensuel / famille',
 }
 
-export function FinancesContent({ sites, pricingRules, invoices, revenueStats, currentYear }: Props) {
+type PricingForm = {
+  site_id: string
+  name: string
+  billing_type: PricingRule['billing_type']
+  price_per_session: string
+  price_1_child: string
+  price_2_children: string
+  price_3_children: string
+  price_4_children: string
+  price_5plus: string
+  effective_from: string
+  effective_until: string
+  is_active: boolean
+  notes: string
+}
+
+type FamilyRateForm = {
+  family_id: string
+  primary_site_id: string
+  custom_monthly_rate: string
+  custom_rate_note: string
+}
+
+export function FinancesContent({ sites, pricingRules, invoices, revenueStats, currentYear, families }: Props) {
   const [tab, setTab] = useState<'dashboard' | 'factures' | 'tarifs'>('dashboard')
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all')
   const [filterSite, setFilterSite] = useState('all')
+  const [localPricingRules, setLocalPricingRules] = useState(pricingRules)
+  const [localFamilies, setLocalFamilies] = useState(families)
+  const [savingPricing, setSavingPricing] = useState(false)
+  const [savingFamilyRate, setSavingFamilyRate] = useState(false)
+  const [pricingForm, setPricingForm] = useState<PricingForm>({
+    site_id: sites[0]?.id ?? '',
+    name: `Tarif ${sites[0]?.name ?? 'site'} ${currentYear}`,
+    billing_type: 'monthly_family',
+    price_per_session: '',
+    price_1_child: '45',
+    price_2_children: '40',
+    price_3_children: '35',
+    price_4_children: '30',
+    price_5plus: '25',
+    effective_from: new Date().toISOString().split('T')[0]!,
+    effective_until: '',
+    is_active: true,
+    notes: '',
+  })
+  const [familyRateForm, setFamilyRateForm] = useState<FamilyRateForm>({
+    family_id: families[0]?.id ?? '',
+    primary_site_id: families[0]?.primary_site_id ?? sites[0]?.id ?? '',
+    custom_monthly_rate: families[0]?.custom_monthly_rate?.toString() ?? '',
+    custom_rate_note: families[0]?.custom_rate_note ?? '',
+  })
 
   // KPIs globaux
   const totalDue   = invoices.reduce((s, i) => s + i.amount_due,  0)
@@ -55,8 +104,8 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const financeActions = [
     {
       title: 'Tarifs',
-      text: pricingRules.length > 0 ? `${pricingRules.length} regle${pricingRules.length > 1 ? 's' : ''} configuree${pricingRules.length > 1 ? 's' : ''}` : 'Configurer les tarifs par site',
-      done: pricingRules.length > 0,
+      text: localPricingRules.length > 0 ? `${localPricingRules.length} regle${localPricingRules.length > 1 ? 's' : ''} configuree${localPricingRules.length > 1 ? 's' : ''}` : 'Configurer les tarifs par site',
+      done: localPricingRules.length > 0,
       tab: 'tarifs' as const,
     },
     {
@@ -126,6 +175,78 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
     link.download = `factures-${currentYear}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function createPricingRule(event: React.FormEvent) {
+    event.preventDefault()
+    setSavingPricing(true)
+    try {
+      const res = await fetch('/api/pricing-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          site_id: pricingForm.site_id,
+          name: pricingForm.name,
+          billing_type: pricingForm.billing_type,
+          price_per_session: pricingForm.price_per_session,
+          price_1_child: pricingForm.price_1_child,
+          price_2_children: pricingForm.price_2_children,
+          price_3_children: pricingForm.price_3_children,
+          price_4_children: pricingForm.price_4_children,
+          price_5plus: pricingForm.price_5plus,
+          effective_from: pricingForm.effective_from,
+          effective_until: pricingForm.effective_until || null,
+          is_active: pricingForm.is_active,
+          notes: pricingForm.notes || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Impossible de créer le tarif')
+      setLocalPricingRules((current) => [data as PricingRule, ...current])
+      setPricingForm((current) => ({
+        ...current,
+        name: `Tarif ${sites.find((site) => site.id === current.site_id)?.name ?? 'site'} ${currentYear}`,
+        notes: '',
+      }))
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur lors de la création du tarif')
+    } finally {
+      setSavingPricing(false)
+    }
+  }
+
+  async function saveFamilyRate(event: React.FormEvent) {
+    event.preventDefault()
+    if (!familyRateForm.family_id) return
+    setSavingFamilyRate(true)
+    try {
+      const res = await fetch(`/api/families/${familyRateForm.family_id}/rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primary_site_id: familyRateForm.primary_site_id || null,
+          custom_monthly_rate: familyRateForm.custom_monthly_rate,
+          custom_rate_note: familyRateForm.custom_rate_note || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Impossible de modifier le tarif famille')
+      setLocalFamilies((current) => current.map((family) => family.id === data.id ? data as Family : family))
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur lors de la modification famille')
+    } finally {
+      setSavingFamilyRate(false)
+    }
+  }
+
+  function selectFamilyForRate(familyId: string) {
+    const family = localFamilies.find((item) => item.id === familyId)
+    setFamilyRateForm({
+      family_id: familyId,
+      primary_site_id: family?.primary_site_id ?? sites[0]?.id ?? '',
+      custom_monthly_rate: family?.custom_monthly_rate?.toString() ?? '',
+      custom_rate_note: family?.custom_rate_note ?? '',
+    })
   }
 
   return (
@@ -281,7 +402,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                   const siteInvoices = invoices.filter(i => i.site_id === site.id)
                   const sitePaid = siteInvoices.reduce((s, i) => s + i.amount_paid, 0)
                   const siteDue  = siteInvoices.reduce((s, i) => s + i.amount_due,  0)
-                  const rule = pricingRules.find(r => r.site_id === site.id && r.is_active)
+                  const rule = localPricingRules.find(r => r.site_id === site.id && r.is_active)
                   return (
                     <div key={site.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
                       <div className="flex items-center justify-between mb-4">
@@ -432,9 +553,145 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
         {tab === 'tarifs' && (
           <div className="space-y-5">
             <FadeIn>
+              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+                <form onSubmit={createPricingRule} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Nouvelle grille</p>
+                      <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Créer un tarif par site</h2>
+                      <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                        Par séance, mensuel par enfant ou mensuel famille avec dégressivité.
+                      </p>
+                    </div>
+                    <Plus className="h-5 w-5 text-emerald-600" />
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Site">
+                      <select
+                        value={pricingForm.site_id}
+                        onChange={(e) => {
+                          const siteName = sites.find((site) => site.id === e.target.value)?.name ?? 'site'
+                          setPricingForm((current) => ({ ...current, site_id: e.target.value, name: `Tarif ${siteName} ${currentYear}` }))
+                        }}
+                        className={selectCls}
+                        required
+                      >
+                        {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Nom du tarif">
+                      <input value={pricingForm.name} onChange={(e) => setPricingForm((current) => ({ ...current, name: e.target.value }))} className={inputCls} required />
+                    </Field>
+                    <Field label="Type de facturation">
+                      <select
+                        value={pricingForm.billing_type}
+                        onChange={(e) => setPricingForm((current) => ({ ...current, billing_type: e.target.value as PricingRule['billing_type'] }))}
+                        className={selectCls}
+                      >
+                        <option value="monthly_family">Mensuel famille dégressif</option>
+                        <option value="monthly_per_child">Mensuel par enfant</option>
+                        <option value="per_session">Par séance</option>
+                      </select>
+                    </Field>
+                    <Field label="Actif dès le">
+                      <input type="date" value={pricingForm.effective_from} onChange={(e) => setPricingForm((current) => ({ ...current, effective_from: e.target.value }))} className={inputCls} required />
+                    </Field>
+                  </div>
+
+                  {pricingForm.billing_type === 'per_session' ? (
+                    <div className="mt-4">
+                      <Field label="Prix par séance et par enfant">
+                        <input type="number" min="0" step="0.01" value={pricingForm.price_per_session} onChange={(e) => setPricingForm((current) => ({ ...current, price_per_session: e.target.value }))} placeholder="ex. 12" className={inputCls} />
+                      </Field>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-5">
+                      {([
+                        ['price_1_child', '1 enfant'],
+                        ['price_2_children', '2 enfants'],
+                        ['price_3_children', '3 enfants'],
+                        ['price_4_children', '4 enfants'],
+                        ['price_5plus', '5+'],
+                      ] as Array<[keyof Pick<PricingForm, 'price_1_child' | 'price_2_children' | 'price_3_children' | 'price_4_children' | 'price_5plus'>, string]>).map(([key, label]) => (
+                        <Field key={key} label={label}>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={pricingForm[key]}
+                            onChange={(e) => setPricingForm((current) => ({ ...current, [key]: e.target.value }))}
+                            className={inputCls}
+                          />
+                        </Field>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <Field label="Fin de validité">
+                      <input type="date" value={pricingForm.effective_until} onChange={(e) => setPricingForm((current) => ({ ...current, effective_until: e.target.value }))} className={inputCls} />
+                    </Field>
+                    <label className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-sm text-[var(--color-text)]">
+                      <input type="checkbox" checked={pricingForm.is_active} onChange={(e) => setPricingForm((current) => ({ ...current, is_active: e.target.checked }))} />
+                      Tarif actif
+                    </label>
+                  </div>
+
+                  <Field label="Notes et conditions">
+                    <textarea value={pricingForm.notes} onChange={(e) => setPricingForm((current) => ({ ...current, notes: e.target.value }))} rows={3} placeholder="Ex. Tarif solidaire, valable pour l'année, remise fratrie..." className={inputCls} />
+                  </Field>
+
+                  <button type="submit" disabled={savingPricing || !pricingForm.site_id} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
+                    <Save className="h-4 w-4" />
+                    {savingPricing ? 'Création...' : 'Créer le tarif'}
+                  </button>
+                </form>
+
+                <form onSubmit={saveFamilyRate} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+                  <div className="mb-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-600">Cas particulier</p>
+                    <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Tarif personnalisé famille</h2>
+                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                      Pour une famille en difficulté, fixe un montant mensuel spécial et documente la raison.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <Field label="Famille">
+                      <select value={familyRateForm.family_id} onChange={(e) => selectFamilyForRate(e.target.value)} className={selectCls}>
+                        <option value="">Choisir une famille</option>
+                        {localFamilies.map((family) => (
+                          <option key={family.id} value={family.id}>{family.parent1_first} {family.parent1_last}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Site principal">
+                      <select value={familyRateForm.primary_site_id} onChange={(e) => setFamilyRateForm((current) => ({ ...current, primary_site_id: e.target.value }))} className={selectCls}>
+                        <option value="">Aucun site</option>
+                        {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Montant mensuel personnalisé">
+                      <input type="number" min="0" step="0.01" value={familyRateForm.custom_monthly_rate} onChange={(e) => setFamilyRateForm((current) => ({ ...current, custom_monthly_rate: e.target.value }))} placeholder="ex. 20" className={inputCls} />
+                    </Field>
+                    <Field label="Justification / note interne">
+                      <textarea value={familyRateForm.custom_rate_note} onChange={(e) => setFamilyRateForm((current) => ({ ...current, custom_rate_note: e.target.value }))} rows={4} placeholder="Ex. Tarif solidaire jusqu'à décembre, situation temporaire..." className={inputCls} />
+                    </Field>
+                  </div>
+
+                  <button type="submit" disabled={savingFamilyRate || !familyRateForm.family_id} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60">
+                    <Users className="h-4 w-4" />
+                    {savingFamilyRate ? 'Enregistrement...' : 'Enregistrer la famille'}
+                  </button>
+                </form>
+              </div>
+            </FadeIn>
+
+            <FadeIn>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {sites.map(site => {
-                  const rules = pricingRules.filter(r => r.site_id === site.id)
+                  const rules = localPricingRules.filter(r => r.site_id === site.id)
                     .sort((a, b) => b.effective_from.localeCompare(a.effective_from))
                   return (
                     <div key={site.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
@@ -544,4 +801,14 @@ function KpiCard({ label, value, sub, icon, color }: {
   )
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-sm font-medium text-[var(--color-text)]">{label}</span>
+      {children}
+    </label>
+  )
+}
+
 const selectCls = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-emerald-500/30'
+const inputCls = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-emerald-500/30'
