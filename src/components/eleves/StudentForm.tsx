@@ -100,6 +100,71 @@ const SECTIONS = [
 
 type SectionId = typeof SECTIONS[number]['id']
 
+const TODAY = new Date().toISOString().split('T')[0]!
+const MIN_BIRTH_DATE = '1900-01-01'
+
+const RELATION_OPTIONS = [
+  'Père',
+  'Mère',
+  'Grand-père',
+  'Grand-mère',
+  'Oncle',
+  'Tante',
+  'Frère',
+  'Sœur',
+  'Tuteur',
+  'Ami de famille',
+  'Voisin',
+]
+
+const COUNTRY_DIAL_CODES = [
+  ['Afghanistan', '+93'], ['Afrique du Sud', '+27'], ['Albanie', '+355'], ['Algérie', '+213'], ['Allemagne', '+49'],
+  ['Andorre', '+376'], ['Angola', '+244'], ['Anguilla', '+1-264'], ['Antigua-et-Barbuda', '+1-268'], ['Arabie saoudite', '+966'],
+  ['Argentine', '+54'], ['Arménie', '+374'], ['Aruba', '+297'], ['Australie', '+61'], ['Autriche', '+43'],
+  ['Azerbaïdjan', '+994'], ['Bahamas', '+1-242'], ['Bahreïn', '+973'], ['Bangladesh', '+880'], ['Barbade', '+1-246'],
+  ['Belgique', '+32'], ['Belize', '+501'], ['Bénin', '+229'], ['Bermudes', '+1-441'], ['Bhoutan', '+975'],
+  ['Biélorussie', '+375'], ['Bolivie', '+591'], ['Bosnie-Herzégovine', '+387'], ['Botswana', '+267'], ['Brésil', '+55'],
+  ['Brunei', '+673'], ['Bulgarie', '+359'], ['Burkina Faso', '+226'], ['Burundi', '+257'], ['Cambodge', '+855'],
+  ['Cameroun', '+237'], ['Canada', '+1'], ['Cap-Vert', '+238'], ['Chili', '+56'], ['Chine', '+86'],
+  ['Chypre', '+357'], ['Colombie', '+57'], ['Comores', '+269'], ['Congo', '+242'], ['Corée du Nord', '+850'],
+  ['Corée du Sud', '+82'], ['Costa Rica', '+506'], ['Côte d’Ivoire', '+225'], ['Croatie', '+385'], ['Cuba', '+53'],
+  ['Danemark', '+45'], ['Djibouti', '+253'], ['Dominique', '+1-767'], ['Égypte', '+20'], ['Émirats arabes unis', '+971'],
+  ['Équateur', '+593'], ['Érythrée', '+291'], ['Espagne', '+34'], ['Estonie', '+372'], ['Eswatini', '+268'],
+  ['États-Unis', '+1'], ['Éthiopie', '+251'], ['Fidji', '+679'], ['Finlande', '+358'], ['France', '+33'],
+  ['Gabon', '+241'], ['Gambie', '+220'], ['Géorgie', '+995'], ['Ghana', '+233'], ['Gibraltar', '+350'],
+  ['Grèce', '+30'], ['Grenade', '+1-473'], ['Groenland', '+299'], ['Guadeloupe', '+590'], ['Guam', '+1-671'],
+  ['Guatemala', '+502'], ['Guinée', '+224'], ['Guinée-Bissau', '+245'], ['Guinée équatoriale', '+240'], ['Guyana', '+592'],
+  ['Guyane française', '+594'], ['Haïti', '+509'], ['Honduras', '+504'], ['Hong Kong', '+852'], ['Hongrie', '+36'],
+  ['Île Maurice', '+230'], ['Îles Caïmans', '+1-345'], ['Îles Féroé', '+298'], ['Îles Malouines', '+500'], ['Îles Mariannes du Nord', '+1-670'],
+  ['Îles Marshall', '+692'], ['Îles Salomon', '+677'], ['Îles Vierges britanniques', '+1-284'], ['Îles Vierges américaines', '+1-340'], ['Inde', '+91'],
+  ['Indonésie', '+62'], ['Irak', '+964'], ['Iran', '+98'], ['Irlande', '+353'], ['Islande', '+354'],
+  ['Israël', '+972'], ['Italie', '+39'], ['Jamaïque', '+1-876'], ['Japon', '+81'], ['Jordanie', '+962'],
+  ['Kazakhstan', '+7'], ['Kenya', '+254'], ['Kirghizistan', '+996'], ['Kiribati', '+686'], ['Kosovo', '+383'],
+  ['Koweït', '+965'], ['Laos', '+856'], ['Lesotho', '+266'], ['Lettonie', '+371'], ['Liban', '+961'],
+  ['Liberia', '+231'], ['Libye', '+218'], ['Liechtenstein', '+423'], ['Lituanie', '+370'], ['Luxembourg', '+352'],
+  ['Macao', '+853'], ['Macédoine du Nord', '+389'], ['Madagascar', '+261'], ['Malaisie', '+60'], ['Malawi', '+265'],
+  ['Maldives', '+960'], ['Mali', '+223'], ['Malte', '+356'], ['Maroc', '+212'], ['Martinique', '+596'],
+  ['Mauritanie', '+222'], ['Mayotte', '+262'], ['Mexique', '+52'], ['Micronésie', '+691'], ['Moldavie', '+373'],
+  ['Monaco', '+377'], ['Mongolie', '+976'], ['Monténégro', '+382'], ['Montserrat', '+1-664'], ['Mozambique', '+258'],
+  ['Myanmar', '+95'], ['Namibie', '+264'], ['Nauru', '+674'], ['Népal', '+977'], ['Nicaragua', '+505'],
+  ['Niger', '+227'], ['Nigeria', '+234'], ['Norvège', '+47'], ['Nouvelle-Calédonie', '+687'], ['Nouvelle-Zélande', '+64'],
+  ['Oman', '+968'], ['Ouganda', '+256'], ['Ouzbékistan', '+998'], ['Pakistan', '+92'], ['Palaos', '+680'],
+  ['Palestine', '+970'], ['Panama', '+507'], ['Papouasie-Nouvelle-Guinée', '+675'], ['Paraguay', '+595'], ['Pays-Bas', '+31'],
+  ['Pérou', '+51'], ['Philippines', '+63'], ['Pologne', '+48'], ['Polynésie française', '+689'], ['Porto Rico', '+1-787'],
+  ['Portugal', '+351'], ['Qatar', '+974'], ['République centrafricaine', '+236'], ['République démocratique du Congo', '+243'], ['République dominicaine', '+1-809'],
+  ['République tchèque', '+420'], ['Réunion', '+262'], ['Roumanie', '+40'], ['Royaume-Uni', '+44'], ['Russie', '+7'],
+  ['Rwanda', '+250'], ['Saint-Barthélemy', '+590'], ['Saint-Kitts-et-Nevis', '+1-869'], ['Saint-Marin', '+378'], ['Saint-Martin', '+590'],
+  ['Saint-Pierre-et-Miquelon', '+508'], ['Saint-Vincent-et-les-Grenadines', '+1-784'], ['Sainte-Lucie', '+1-758'], ['Salvador', '+503'], ['Samoa', '+685'],
+  ['Samoa américaines', '+1-684'], ['São Tomé-et-Principe', '+239'], ['Sénégal', '+221'], ['Serbie', '+381'], ['Seychelles', '+248'],
+  ['Sierra Leone', '+232'], ['Singapour', '+65'], ['Slovaquie', '+421'], ['Slovénie', '+386'], ['Somalie', '+252'],
+  ['Soudan', '+249'], ['Soudan du Sud', '+211'], ['Sri Lanka', '+94'], ['Suède', '+46'], ['Suisse', '+41'],
+  ['Suriname', '+597'], ['Syrie', '+963'], ['Tadjikistan', '+992'], ['Taïwan', '+886'], ['Tanzanie', '+255'],
+  ['Tchad', '+235'], ['Thaïlande', '+66'], ['Timor oriental', '+670'], ['Togo', '+228'], ['Tonga', '+676'],
+  ['Trinité-et-Tobago', '+1-868'], ['Tunisie', '+216'], ['Turkménistan', '+993'], ['Turquie', '+90'], ['Tuvalu', '+688'],
+  ['Ukraine', '+380'], ['Uruguay', '+598'], ['Vanuatu', '+678'], ['Vatican', '+379'], ['Venezuela', '+58'],
+  ['Vietnam', '+84'], ['Wallis-et-Futuna', '+681'], ['Yémen', '+967'], ['Zambie', '+260'], ['Zimbabwe', '+263'],
+] as const
+
 export function StudentForm({ mode, sites, levels, existingFamilies, student }: Props) {
   const router = useRouter()
   const [form, setForm] = useState<FormData>(student ? formFromStudent(student) : INIT)
@@ -125,6 +190,20 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
     setForm((prev) => ({ ...prev, [key]: value }))
   }
 
+  function setDate<K extends 'date_of_birth' | 'enrollment_date'>(key: K, value: string) {
+    if (value.length > 10) return
+    set(key, value)
+  }
+
+  function validateDate<K extends 'date_of_birth' | 'enrollment_date'>(key: K, label: string, min: string, max: string) {
+    const value = form[key]
+    if (!value) return
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value < min || value > max) {
+      set(key, '')
+      setError(`${label} invalide. Choisis une date comprise entre ${formatDate(min)} et ${formatDate(max)}.`)
+    }
+  }
+
   function goNext() {
     if (activeIndex < SECTIONS.length - 1) {
       setSection(SECTIONS[activeIndex + 1]!.id)
@@ -134,6 +213,16 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (form.date_of_birth && !isDateInRange(form.date_of_birth, MIN_BIRTH_DATE, TODAY)) {
+      setError(`Date de naissance invalide. Choisis une date comprise entre ${formatDate(MIN_BIRTH_DATE)} et ${formatDate(TODAY)}.`)
+      setSection('identity')
+      return
+    }
+    if (form.enrollment_date && !isDateInRange(form.enrollment_date, '2020-01-01', '2100-12-31')) {
+      setError("Date d'inscription invalide.")
+      setSection('school')
+      return
+    }
     if (!form.first_name || !form.last_name || !form.site_id) {
       setError('Prénom, nom et site sont obligatoires.')
       setSection(!form.first_name || !form.last_name ? 'identity' : 'school')
@@ -358,7 +447,15 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label="Date de naissance">
-                      <input type="date" value={form.date_of_birth} onChange={(e) => set('date_of_birth', e.target.value)} className={inputCls} />
+                      <input
+                        type="date"
+                        value={form.date_of_birth}
+                        min={MIN_BIRTH_DATE}
+                        max={TODAY}
+                        onChange={(e) => setDate('date_of_birth', e.target.value)}
+                        onBlur={() => validateDate('date_of_birth', 'Date de naissance', MIN_BIRTH_DATE, TODAY)}
+                        className={inputCls}
+                      />
                     </Field>
                     <Field label="Genre">
                       <select value={form.gender} onChange={(e) => set('gender', e.target.value as 'M' | 'F' | 'autre')} className={selectCls}>
@@ -421,7 +518,15 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
                       </select>
                     </Field>
                     <Field label="Date d'inscription">
-                      <input type="date" value={form.enrollment_date} onChange={(e) => set('enrollment_date', e.target.value)} className={inputCls} />
+                      <input
+                        type="date"
+                        value={form.enrollment_date}
+                        min="2020-01-01"
+                        max="2100-12-31"
+                        onChange={(e) => setDate('enrollment_date', e.target.value)}
+                        onBlur={() => validateDate('enrollment_date', "Date d'inscription", '2020-01-01', '2100-12-31')}
+                        className={inputCls}
+                      />
                     </Field>
                   </div>
 
@@ -469,8 +574,8 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
                         <div className="grid gap-4 sm:grid-cols-2">
                           <Field label="Prénom"><input value={form.parent1_first} onChange={(e) => set('parent1_first', e.target.value)} placeholder="Prénom" className={inputCls} /></Field>
                           <Field label="Nom"><input value={form.parent1_last} onChange={(e) => set('parent1_last', e.target.value)} placeholder="Nom" className={inputCls} /></Field>
-                          <Field label="Téléphone"><input value={form.parent1_phone} onChange={(e) => set('parent1_phone', e.target.value)} placeholder="+33 6 ..." className={inputCls} /></Field>
-                          <Field label="WhatsApp"><input value={form.parent1_whatsapp} onChange={(e) => set('parent1_whatsapp', e.target.value)} placeholder="+33 6 ..." className={inputCls} /></Field>
+                          <PhoneField label="Téléphone" value={form.parent1_phone} onChange={(value) => set('parent1_phone', value)} />
+                          <PhoneField label="WhatsApp" value={form.parent1_whatsapp} onChange={(value) => set('parent1_whatsapp', value)} />
                         </div>
                         <Field label="Email"><input type="email" value={form.parent1_email} onChange={(e) => set('parent1_email', e.target.value)} placeholder="parent@email.com" className={inputCls} /></Field>
                       </Fieldset>
@@ -479,7 +584,7 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
                         <div className="grid gap-4 sm:grid-cols-2">
                           <Field label="Prénom"><input value={form.parent2_first} onChange={(e) => set('parent2_first', e.target.value)} placeholder="Prénom" className={inputCls} /></Field>
                           <Field label="Nom"><input value={form.parent2_last} onChange={(e) => set('parent2_last', e.target.value)} placeholder="Nom" className={inputCls} /></Field>
-                          <Field label="Téléphone"><input value={form.parent2_phone} onChange={(e) => set('parent2_phone', e.target.value)} placeholder="+33 6 ..." className={inputCls} /></Field>
+                          <PhoneField label="Téléphone" value={form.parent2_phone} onChange={(value) => set('parent2_phone', value)} />
                           <Field label="Email"><input type="email" value={form.parent2_email} onChange={(e) => set('parent2_email', e.target.value)} placeholder="parent2@email.com" className={inputCls} /></Field>
                         </div>
                       </Fieldset>
@@ -508,13 +613,9 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
                     <Field label="Contact d'urgence">
                       <input value={form.emergency_name} onChange={(e) => set('emergency_name', e.target.value)} placeholder="Nom du contact" className={inputCls} />
                     </Field>
-                    <Field label="Lien de parenté">
-                      <input value={form.emergency_relation} onChange={(e) => set('emergency_relation', e.target.value)} placeholder="Grand-mère, oncle..." className={inputCls} />
-                    </Field>
+                    <RelationshipField value={form.emergency_relation} onChange={(value) => set('emergency_relation', value)} />
                   </div>
-                  <Field label="Téléphone d'urgence">
-                    <input value={form.emergency_phone} onChange={(e) => set('emergency_phone', e.target.value)} placeholder="+33 6 ..." className={inputCls} />
-                  </Field>
+                  <PhoneField label="Téléphone d'urgence" value={form.emergency_phone} onChange={(value) => set('emergency_phone', value)} />
                   <Field label="Notes médicales">
                     <textarea
                       value={form.medical_notes}
@@ -547,14 +648,16 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
                   Suivant <ArrowRight className="h-4 w-4" />
                 </button>
               )}
-              <button
-                type="submit"
-                disabled={saving || sites.length === 0}
-                className="btn-press inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                {mode === 'create' ? "Inscrire l'élève" : 'Enregistrer'}
-              </button>
+              {activeIndex === SECTIONS.length - 1 && (
+                <button
+                  type="submit"
+                  disabled={saving || sites.length === 0}
+                  className="btn-press inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {mode === 'create' ? "Inscrire l'élève" : 'Enregistrer'}
+                </button>
+              )}
             </div>
           </div>
         </main>
@@ -615,6 +718,93 @@ function ModeButton({ active, onClick, title, text }: { active: boolean; onClick
   )
 }
 
+function PhoneField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const parsed = parsePhoneValue(value)
+  const [country, setCountry] = useState(parsed.country)
+  const [local, setLocal] = useState(parsed.local)
+  const [query, setQuery] = useState('')
+
+  const countries = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    if (!normalized) return COUNTRY_DIAL_CODES
+    return COUNTRY_DIAL_CODES.filter(([name, dial]) =>
+      name.toLowerCase().includes(normalized) || dial.includes(normalized)
+    )
+  }, [query])
+
+  function update(nextCountry: string, nextLocal: string) {
+    setCountry(nextCountry)
+    setLocal(nextLocal)
+    const cleanLocal = nextLocal.replace(/[^\d\s().-]/g, '').replace(/\s+/g, ' ').trim()
+    onChange(cleanLocal ? `${nextCountry} ${cleanLocal}` : '')
+  }
+
+  return (
+    <Field label={label} hint="Recherche rapide par pays ou indicatif.">
+      <div className="grid gap-2 sm:grid-cols-[1fr_1.25fr]">
+        <div className="space-y-2">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="France, Maroc, +33..."
+            className={inputCls}
+          />
+          <select value={country} onChange={(e) => update(e.target.value, local)} className={selectCls}>
+            {countries.map(([name, dial]) => (
+              <option key={`${name}-${dial}`} value={dial}>{name} {dial}</option>
+            ))}
+          </select>
+        </div>
+        <input
+          inputMode="tel"
+          value={local}
+          onChange={(e) => update(country, e.target.value)}
+          placeholder="6 12 34 56 78"
+          className={inputCls}
+        />
+      </div>
+    </Field>
+  )
+}
+
+function RelationshipField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const isKnown = RELATION_OPTIONS.includes(value)
+  const [mode, setMode] = useState(value && !isKnown ? 'Autre' : value)
+  const [custom, setCustom] = useState(value && !isKnown ? value : '')
+
+  function updateMode(nextMode: string) {
+    setMode(nextMode)
+    if (nextMode === 'Autre') {
+      onChange(custom)
+    } else {
+      onChange(nextMode)
+    }
+  }
+
+  return (
+    <Field label="Lien de parenté">
+      <select value={mode} onChange={(e) => updateMode(e.target.value)} className={selectCls}>
+        <option value="">Choisir une relation</option>
+        {RELATION_OPTIONS.map((relation) => (
+          <option key={relation} value={relation}>{relation}</option>
+        ))}
+        <option value="Autre">Autre</option>
+      </select>
+      {mode === 'Autre' && (
+        <input
+          value={custom}
+          onChange={(e) => {
+            setCustom(e.target.value)
+            onChange(e.target.value)
+          }}
+          placeholder="Ajouter une relation personnalisée"
+          className={inputCls}
+        />
+      )}
+    </Field>
+  )
+}
+
 function SummaryRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2 last:border-0 last:pb-0">
@@ -646,6 +836,27 @@ function sectionHelp(section: SectionId) {
 
 const inputCls = 'w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground focus:border-violet-400 focus:ring-4 focus:ring-violet-500/15 disabled:cursor-not-allowed disabled:opacity-60'
 const selectCls = `${inputCls} cursor-pointer`
+
+function isDateInRange(value: string, min: string, max: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && value >= min && value <= max
+}
+
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('fr-FR')
+}
+
+function parsePhoneValue(value: string) {
+  const trimmed = value.trim()
+  const match = [...COUNTRY_DIAL_CODES]
+    .sort((a, b) => b[1].length - a[1].length)
+    .find(([, dial]) => trimmed.startsWith(dial))
+
+  if (!match) return { country: '+33', local: trimmed.replace(/^\+/, '') }
+  return {
+    country: match[1],
+    local: trimmed.slice(match[1].length).trim(),
+  }
+}
 
 function formFromStudent(s: Student): FormData {
   return {

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { getSites, getLevels, getGroupsBySite, getActiveAcademicYear, getStudentStats, getSchedulesByDay, getInvoices } from '@/lib/supabase/queries'
 import { Header } from '@/components/layout/Header'
 import { DashboardContent } from '@/components/dashboard/DashboardContent'
@@ -16,14 +16,15 @@ export default async function DashboardPage() {
 
   // Chargement des données en parallèle
   const currentYear = new Date().getFullYear()
+  const admin = createAdminSupabaseClient()
 
   const [sites, levels, academicYear, studentStats, schedulesByDay, invoices] = await Promise.all([
-    getSites(supabase),
-    getLevels(supabase),
-    getActiveAcademicYear(supabase).catch(() => null),
-    getStudentStats(supabase).catch(() => null),
-    getSchedulesByDay(supabase).catch(() => ({})),
-    getInvoices(supabase, { year: currentYear }).catch(() => []),
+    getSites(admin),
+    getLevels(admin),
+    getActiveAcademicYear(admin).catch(() => null),
+    getStudentStats(admin).catch(() => null),
+    getSchedulesByDay(admin).catch(() => ({})),
+    getInvoices(admin, { year: currentYear }).catch(() => []),
   ])
 
   // Groupes pour chaque site
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
   await Promise.all(
     sites.map(async (site) => {
       if (academicYear) {
-        const groups = await getGroupsBySite(supabase, site.id, academicYear.id)
+        const groups = await getGroupsBySite(admin, site.id, academicYear.id)
         groupsBySite[site.id] = groups
       } else {
         groupsBySite[site.id] = []
