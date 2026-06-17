@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 
 // ─── Schema de mise à jour ───────────────────────────────────────────────────
 
@@ -39,14 +39,15 @@ export async function PATCH(
 
     const updates: Record<string, unknown> = {}
     if (parsed.data.status !== undefined) updates.status = parsed.data.status
-    if (parsed.data.html_content !== undefined) updates.html_content = parsed.data.html_content
+    if (parsed.data.html_content !== undefined) updates.body_html = parsed.data.html_content
     if (parsed.data.whatsapp_text !== undefined) updates.whatsapp_text = parsed.data.whatsapp_text
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'Aucune mise à jour fournie' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
+    const admin = createAdminSupabaseClient()
+    const { data, error } = await admin
       .from('resumes')
       .update(updates)
       .eq('id', id)

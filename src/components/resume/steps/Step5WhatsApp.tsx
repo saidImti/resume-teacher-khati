@@ -44,11 +44,12 @@ export function Step5WhatsApp({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'approved' }),
       })
-      if (!response.ok) throw new Error('Erreur validation')
+      const data = await response.json().catch(() => null) as { error?: string; details?: string } | null
+      if (!response.ok) throw new Error(data?.details ?? data?.error ?? 'Erreur validation')
       setIsApproved(true)
       toast.success('Résumé approuvé !')
-    } catch {
-      toast.error('Erreur lors de la validation')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de la validation')
     } finally {
       setIsApproving(false)
     }
