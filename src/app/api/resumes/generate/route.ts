@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { generateResume, resumeToHtml } from '@/lib/ai/generator'
 import type { LevelSlug, LessonContentType } from '@/types'
 
@@ -90,6 +90,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     }
 
+    const admin = createAdminSupabaseClient()
+
     const body = await request.json()
     const parsed = GenerateSchema.safeParse(body)
 
@@ -116,13 +118,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Récupérer le groupe + son niveau
-    const { data: group, error: groupError } = await supabase
+    const { data: group, error: groupError } = await admin
       .from('groups')
       .select(`
-        id, name, site_id,
+        id, name, site_id, user_id,
         level:levels!level_id ( id, name, slug, color, emoji )
       `)
       .eq('id', groupId)
+      .eq('user_id', user.id)
       .single()
 
     if (groupError || !group) {
@@ -140,7 +143,7 @@ export async function POST(request: NextRequest) {
     // Récupérer l'année scolaire active
     let finalAcademicYearId = academicYearId
     if (!finalAcademicYearId) {
-      const { data: year } = await supabase
+      const { data: year } = await admin
         .from('academic_years')
         .select('id')
         .eq('is_active', true)
@@ -156,7 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Créer la session en DB
-    const { data: session, error: sessionError } = await supabase
+    const { data: session, error: sessionError } = await admin
       .from('sessions')
       .insert({
         group_id:         groupId,
@@ -175,7 +178,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Sauvegarder le contenu
-    const { error: contentError } = await supabase.from('contents').insert({
+    const { error: contentError } = await admin.from('contents').insert({
       session_id: session.id,
       type:       'text',
       raw_text:   contentText,
@@ -206,7 +209,7 @@ export async function POST(request: NextRequest) {
     const htmlContent   = resumeToHtml(generatedData, sessionDate)
 
     // Sauvegarder le résumé
-    const { data: resume, error: resumeError } = await supabase
+    const { data: resume, error: resumeError } = await admin
       .from('resumes')
       .insert({
         session_id:       session.id,
@@ -263,7 +266,7 @@ export async function POST(request: NextRequest) {
       sort_order:   index,
     }))
 
-    await supabase.from('resume_sections').insert(sectionsToInsert)
+    await admin.from('resume_sections').insert(sectionsToInsert)
 
     return NextResponse.json({
       success:      true,
