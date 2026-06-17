@@ -43,6 +43,18 @@ interface ResumeWizardProps {
   academicYearId?: string
 }
 
+interface PadletQueueJob {
+  groupId: string
+  group: {
+    id: string
+    name: string
+    levelName: string
+    levelSlug: string
+  }
+  lesson: StructuredLesson
+  date: string
+}
+
 // ─── Valeurs initiales ────────────────────────────────────────────────────────
 
 const INITIAL_STATE: WizardState = {
@@ -69,6 +81,7 @@ export function ResumeWizard({
   const [step, setStep]           = useState(1)
   const [maxReachedStep, setMax]  = useState(1)
   const [state, setState]         = useState<WizardState>(INITIAL_STATE)
+  const [queuedCount, setQueuedCount] = useState(0)
 
   // ── Prefill depuis Mes Padlets (sessionStorage) ──────────────────────────
   useEffect(() => {
@@ -77,6 +90,7 @@ export function ResumeWizard({
       const groupId    = sessionStorage.getItem('padlet_prefill_groupId')
       const date       = sessionStorage.getItem('padlet_prefill_date')
       const groupMetaR = sessionStorage.getItem('padlet_prefill_group')
+      const queueRaw   = sessionStorage.getItem('padlet_resume_queue')
 
       if (!lessonRaw || !groupId || !date) return
 
@@ -88,6 +102,8 @@ export function ResumeWizard({
 
       const lesson    = JSON.parse(lessonRaw) as StructuredLesson
       const groupMeta = groupMetaR ? (JSON.parse(groupMetaR) as { id: string; name: string; levelName: string; levelSlug: string }) : null
+      const queue     = queueRaw ? (JSON.parse(queueRaw) as PadletQueueJob[]) : []
+      setQueuedCount(queue.length)
 
       // Cherche le groupe dans les données chargées (peut être absent si pas d'année académique active)
       const allGroups = groupsBySite.flatMap((s) => s.groups)
@@ -200,6 +216,28 @@ export function ResumeWizard({
     goToStep(5)
   }
 
+  function launchNextQueuedResume() {
+    try {
+      const queueRaw = sessionStorage.getItem('padlet_resume_queue')
+      const queue = queueRaw ? (JSON.parse(queueRaw) as PadletQueueJob[]) : []
+      const next = queue.shift()
+
+      if (!next) {
+        window.location.assign('/dashboard')
+        return
+      }
+
+      sessionStorage.setItem('padlet_prefill_lesson', JSON.stringify(next.lesson))
+      sessionStorage.setItem('padlet_prefill_groupId', next.groupId)
+      sessionStorage.setItem('padlet_prefill_date', next.date)
+      sessionStorage.setItem('padlet_prefill_group', JSON.stringify(next.group))
+      sessionStorage.setItem('padlet_resume_queue', JSON.stringify(queue))
+      window.location.assign(`/resumes/new?groupId=${next.groupId}&from=padlet&batch=1`)
+    } catch {
+      window.location.assign('/dashboard')
+    }
+  }
+
   // ─── Rendu de l'étape courante ───────────────────────────────────────────
 
   function renderStep() {
@@ -259,6 +297,8 @@ export function ResumeWizard({
             title={state.title}
             whatsappText={state.whatsappText}
             groupName={state.groupName}
+            queuedCount={queuedCount}
+            onNextQueued={launchNextQueuedResume}
             onBack={() => setStep(4)}
           />
         )

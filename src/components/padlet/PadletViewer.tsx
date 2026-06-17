@@ -527,6 +527,7 @@ export function PadletViewer({
   board, groups, selectedGroupId, sessionDate, onGroupChange, onDateChange, onBack,
 }: PadletViewerProps) {
   const router = useRouter()
+  const initialSlug = groups.find(g => g.id === selectedGroupId)?.levelSlug || groups[0]?.levelSlug || 'kids'
 
   const [items,             setItems]             = useState<LessonItem[]>(() => {
     // Auto-sélectionner les items du niveau du groupe par défaut
@@ -540,15 +541,57 @@ export function PadletViewer({
   const [manualItems,       setManualItems]       = useState<ManualItem[]>([])
   const [recatOpen,         setRecatOpen]         = useState<string | null>(null)
   const [viewMode,          setViewMode]          = useState<ViewMode>('split')
+  const [selectedLevelSlugs, setSelectedLevelSlugs] = useState<string[]>(() => [initialSlug])
+  const [activeLevelSlug, setActiveLevelSlug] = useState(initialSlug)
 
   // Quand le groupe change → re-sélectionner automatiquement les items du bon niveau
   useEffect(() => {
     const group = groups.find(g => g.id === selectedGroupId)
     const slug  = group?.levelSlug ?? ''
     if (!slug) return
-    setItems(prev => prev.map(i => ({ ...i, selected: (i.levels?.[0] ?? 'all') === slug })))
-    setManualItems([])
+    setActiveLevelSlug(slug)
+    setSelectedLevelSlugs(prev => prev.includes(slug) ? prev : [...prev, slug])
+    setItems(prev => {
+      const hasSelectionForLevel = prev.some(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
+      if (hasSelectionForLevel) return prev
+      return prev.map(i => (i.levels?.[0] ?? 'all') === slug ? { ...i, selected: true } : i)
+    })
   }, [selectedGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const availableLevelSlugs = useMemo(() => {
+    const slugs = new Set(groups.map(g => g.levelSlug).filter(Boolean))
+    return LEVEL_ORDER.filter(slug => slugs.has(slug))
+  }, [groups])
+
+  function groupForLevel(slug: string) {
+    return groups.find(g => g.levelSlug === slug)
+  }
+
+  function activateLevel(slug: string) {
+    const group = groupForLevel(slug)
+    if (!group) {
+      toast.error(`Aucun groupe disponible pour ${LEVEL_META[slug]?.label ?? slug}`)
+      return
+    }
+    setActiveLevelSlug(slug)
+    setSelectedLevelSlugs(prev => prev.includes(slug) ? prev : [...prev, slug])
+    onGroupChange(group.id)
+    setItems(prev => {
+      const hasSelectionForLevel = prev.some(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
+      if (hasSelectionForLevel) return prev
+      return prev.map(i => (i.levels?.[0] ?? 'all') === slug ? { ...i, selected: true } : i)
+    })
+  }
+
+  function toggleResumeLevel(slug: string) {
+    if (selectedLevelSlugs.includes(slug)) {
+      const next = selectedLevelSlugs.filter(s => s !== slug)
+      setSelectedLevelSlugs(next)
+      if (activeLevelSlug === slug && next[0]) activateLevel(next[0])
+      return
+    }
+    activateLevel(slug)
+  }
 
   function effType(item: LessonItem): LessonContentType {
     return categoryOverrides[item.id] ?? item.type
@@ -645,6 +688,58 @@ export function PadletViewer({
     router.push(`/resumes/new?groupId=${selectedGroupId}&from=padlet`)
   }
 
+  function selectedItemsForLevel(slug: string): LessonItem[] {
+    return items
+      .filter(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
+      .map(i => ({
+        ...i,
+        id: i.id.replace(/__[a-z]+$/, ''),
+        type: effType(i),
+      }))
+  }
+
+  function handleGenerateBatch() {
+    if (!sessionDate) { toast.error('Selectionnez une date'); return }
+    const jobs = selectedLevelSlugs
+      .map(slug => {
+        const group = groupForLevel(slug)
+        const levelItems = selectedItemsForLevel(slug)
+        if (!group || levelItems.length === 0) return null
+        return {
+          groupId: group.id,
+          group: {
+            id: group.id,
+            name: group.name,
+            levelName: group.levelName,
+            levelSlug: group.levelSlug,
+          },
+          lesson: { theme: board.theme, items: levelItems },
+          date: sessionDate,
+        }
+      })
+      .filter(Boolean) as Array<{
+        groupId: string
+        group: { id: string; name: string; levelName: string; levelSlug: string }
+        lesson: { theme: string; items: LessonItem[] }
+        date: string
+      }>
+
+    if (jobs.length === 0) {
+      toast.error('Selectionne au moins un niveau avec des activites cochees')
+      return
+    }
+
+    const first = jobs[0]
+    const rest = jobs.slice(1)
+    if (!first) return
+    sessionStorage.setItem('padlet_prefill_lesson', JSON.stringify(first.lesson))
+    sessionStorage.setItem('padlet_prefill_groupId', first.groupId)
+    sessionStorage.setItem('padlet_prefill_date', first.date)
+    sessionStorage.setItem('padlet_prefill_group', JSON.stringify(first.group))
+    sessionStorage.setItem('padlet_resume_queue', JSON.stringify(rest))
+    router.push(`/resumes/new?groupId=${first.groupId}&from=padlet&batch=1`)
+  }
+
   return (
     <div className="flex flex-col gap-4">
 
@@ -677,6 +772,93 @@ export function PadletViewer({
           <input type="date" value={sessionDate} onChange={e => onDateChange(e.target.value)}
             className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm font-medium
               focus:outline-none focus:ring-2 focus:ring-primary/30" />
+        </div>
+      </div>
+
+      {/* Multi-resume flow */}
+      <div className="rounded-2xl border border-primary/20 bg-primary/[0.03] p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-primary">Resume multi-niveaux</p>
+            <h3 className="text-base font-extrabold">Prepare une serie sans quitter le Padlet</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Choisis les niveaux, active un niveau, coche ses activites, puis passe au suivant.
+              Chaque niveau genere son propre resume avec la page de revision premium.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-background px-3 py-2 text-sm font-bold text-primary">
+            {selectedLevelSlugs.length} resume{selectedLevelSlugs.length > 1 ? 's' : ''} prepare{selectedLevelSlugs.length > 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {availableLevelSlugs.map(slug => {
+            const meta = LEVEL_META[slug]
+            const levelItems = items.filter(i => (i.levels?.[0] ?? 'all') === slug)
+            const levelSelected = levelItems.filter(i => i.selected).length
+            const isInBatch = selectedLevelSlugs.includes(slug)
+            const isActive = activeLevelSlug === slug
+            return (
+              <button
+                key={slug}
+                type="button"
+                onClick={() => toggleResumeLevel(slug)}
+                onDoubleClick={() => activateLevel(slug)}
+                className={cn(
+                  'rounded-2xl border p-3 text-left transition-all',
+                  isActive
+                    ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
+                    : isInBatch
+                      ? 'border-primary/40 bg-background'
+                      : 'border-border bg-background/70 opacity-70 hover:opacity-100'
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-lg">{meta?.emoji}</span>
+                  <span className={cn(
+                    'rounded-full px-2 py-0.5 text-[11px] font-bold',
+                    isInBatch ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                  )}>
+                    {levelSelected}/{levelItems.length}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm font-extrabold">{meta?.label ?? slug}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {isActive ? 'Niveau actif' : isInBatch ? 'Dans la serie' : 'Ajouter a la serie'}
+                </p>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Astuce : un clic ajoute ou retire le niveau, double-clic active vite le niveau a organiser.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => {
+                const currentIndex = selectedLevelSlugs.indexOf(activeLevelSlug)
+                const nextSlug = selectedLevelSlugs[currentIndex + 1] ?? selectedLevelSlugs[0]
+                if (nextSlug) activateLevel(nextSlug)
+              }}
+              disabled={selectedLevelSlugs.length <= 1}
+            >
+              Niveau suivant
+            </Button>
+            <Button
+              type="button"
+              className="rounded-xl gap-2"
+              onClick={handleGenerateBatch}
+              disabled={selectedLevelSlugs.length === 0}
+            >
+              <Sparkles className="h-4 w-4" />
+              Generer la serie
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -724,7 +906,7 @@ export function PadletViewer({
         <div className="grid grid-cols-[5fr_7fr] gap-3 items-start">
 
           {/* LEFT — Source Padlet */}
-          <div className="sticky top-4 max-h-[calc(100vh-260px)] overflow-y-auto rounded-2xl border bg-background/60 p-2">
+          <div className="sticky top-2 max-h-[calc(100vh-150px)] overflow-y-scroll rounded-2xl border bg-background/60 p-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
             <p className="px-1 pb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
               📌 Source Padlet
             </p>
@@ -852,6 +1034,18 @@ export function PadletViewer({
 
       {/* ── Bouton Générer ── */}
       <div className="sticky bottom-4 pt-2">
+        {selectedLevelSlugs.length > 1 && (
+          <Button
+            onClick={handleGenerateBatch}
+            disabled={selectedLevelSlugs.length === 0}
+            size="lg"
+            variant="secondary"
+            className="mb-2 w-full shadow-lg gap-2 rounded-2xl"
+          >
+            <Sparkles className="h-4 w-4" />
+            Generer {selectedLevelSlugs.length} resumes separes
+          </Button>
+        )}
         <Button onClick={handleGenerate} disabled={selectedCount === 0} size="lg"
           className="w-full shadow-lg gap-2 rounded-2xl">
           <Sparkles className="h-4 w-4" />

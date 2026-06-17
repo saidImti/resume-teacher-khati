@@ -16,6 +16,8 @@ interface Step5WhatsAppProps {
   title: string
   whatsappText: string
   groupName: string
+  queuedCount?: number
+  onNextQueued?: () => void
   onBack: () => void
 }
 
@@ -27,6 +29,8 @@ export function Step5WhatsApp({
   title,
   whatsappText,
   groupName,
+  queuedCount = 0,
+  onNextQueued,
   onBack,
 }: Step5WhatsAppProps) {
   const router = useRouter()
@@ -100,10 +104,18 @@ export function Step5WhatsApp({
           </Button>
           <Button
             className="flex-1"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => {
+              if (queuedCount > 0 && onNextQueued) {
+                onNextQueued()
+                return
+              }
+              router.push('/dashboard')
+            }}
           >
             <LayoutDashboard className="h-4 w-4" />
-            {hasSent ? 'Retour au dashboard' : 'Terminer'}
+            {queuedCount > 0
+              ? `Resume suivant (${queuedCount})`
+              : hasSent ? 'Retour au dashboard' : 'Terminer'}
           </Button>
         </div>
       </div>
