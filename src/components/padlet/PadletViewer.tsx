@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   ChevronLeft, Sparkles, CheckSquare, Square, ExternalLink,
   Check, ChevronDown, ChevronUp, Tag, LayoutList, Plus, X,
+  Eye, FileText, Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -543,6 +544,8 @@ export function PadletViewer({
   const [viewMode,          setViewMode]          = useState<ViewMode>('split')
   const [selectedLevelSlugs, setSelectedLevelSlugs] = useState<string[]>(() => [initialSlug])
   const [activeLevelSlug, setActiveLevelSlug] = useState(initialSlug)
+  const [generatingLevels, setGeneratingLevels] = useState<Record<string, boolean>>({})
+  const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>({})
 
   // Quand le groupe change → re-sélectionner automatiquement les items du bon niveau
   useEffect(() => {
@@ -665,11 +668,8 @@ export function PadletViewer({
     if (!sessionDate)     { toast.error('Sélectionnez une date');  return }
     if (!selectedCount)   { toast.error('Cochez au moins un élément'); return }
 
-    const selectedPadlet = items.filter(i => i.selected).map(i => ({
-      ...i,
-      id:   i.id.replace(/__[a-z]+$/, ''),
-      type: effType(i),
-    }))
+    const selectedPadlet = selectedItemsForLevel(activeLevelSlug)
+    if (selectedPadlet.length === 0) { toast.error('Cochez au moins un élément dans le niveau actif'); return }
     const selectedManual: LessonItem[] = manualItems.filter(i => i.selected).map(i => ({
       id: i.id, name: i.name, type: i.type, link: i.link, selected: true, levels: [],
     }))
@@ -699,45 +699,78 @@ export function PadletViewer({
   }
 
   function handleGenerateBatch() {
-    if (!sessionDate) { toast.error('Selectionnez une date'); return }
-    const jobs = selectedLevelSlugs
-      .map(slug => {
-        const group = groupForLevel(slug)
-        const levelItems = selectedItemsForLevel(slug)
-        if (!group || levelItems.length === 0) return null
-        return {
-          groupId: group.id,
-          group: {
-            id: group.id,
-            name: group.name,
-            levelName: group.levelName,
-            levelSlug: group.levelSlug,
-          },
-          lesson: { theme: board.theme, items: levelItems },
-          date: sessionDate,
-        }
-      })
-      .filter(Boolean) as Array<{
-        groupId: string
-        group: { id: string; name: string; levelName: string; levelSlug: string }
-        lesson: { theme: string; items: LessonItem[] }
-        date: string
-      }>
+    void generateSelectedSeries()
+  }
 
-    if (jobs.length === 0) {
+  async function generateLevelResume(slug: string) {
+    if (!sessionDate) { toast.error('Selectionnez une date'); return null }
+    const group = groupForLevel(slug)
+    if (!group) { toast.error(`Aucun groupe pour ${LEVEL_META[slug]?.label ?? slug}`); return null }
+    const levelItems = selectedItemsForLevel(slug)
+    if (levelItems.length === 0) {
+      toast.error(`Coche au moins une activite pour ${LEVEL_META[slug]?.label ?? slug}`)
+      return null
+    }
+
+    setGeneratingLevels(prev => ({ ...prev, [slug]: true }))
+    try {
+      const response = await fetch('/api/resumes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groupId: group.id,
+          sessionDate,
+          structuredContent: { theme: board.theme, items: levelItems },
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.error ?? 'Generation impossible')
+      }
+      const generated = { id: data.resumeId as string, title: data.title as string }
+      setGeneratedResumes(prev => ({ ...prev, [slug]: generated }))
+      toast.success(`Resume ${LEVEL_META[slug]?.label ?? slug} genere`)
+      return generated
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Erreur de generation')
+      return null
+    } finally {
+      setGeneratingLevels(prev => ({ ...prev, [slug]: false }))
+    }
+  }
+
+  async function generateSelectedSeries() {
+    const slugs = selectedLevelSlugs.filter(slug => groupForLevel(slug) && selectedItemsForLevel(slug).length > 0)
+    if (slugs.length === 0) {
       toast.error('Selectionne au moins un niveau avec des activites cochees')
       return
     }
 
-    const first = jobs[0]
-    const rest = jobs.slice(1)
-    if (!first) return
-    sessionStorage.setItem('padlet_prefill_lesson', JSON.stringify(first.lesson))
-    sessionStorage.setItem('padlet_prefill_groupId', first.groupId)
-    sessionStorage.setItem('padlet_prefill_date', first.date)
-    sessionStorage.setItem('padlet_prefill_group', JSON.stringify(first.group))
-    sessionStorage.setItem('padlet_resume_queue', JSON.stringify(rest))
-    router.push(`/resumes/new?groupId=${first.groupId}&from=padlet&batch=1`)
+    const results: string[] = []
+    for (const slug of slugs) {
+      const existing = generatedResumes[slug]
+      if (existing?.id) {
+        results.push(existing.id)
+        continue
+      }
+      const generated = await generateLevelResume(slug)
+      if (generated?.id) results.push(generated.id)
+    }
+
+    if (results.length > 0) {
+      router.push(`/resumes/generated?ids=${results.join(',')}`)
+    }
+  }
+
+  function openGeneratedResumes(slug?: string) {
+    const ids = slug
+      ? [generatedResumes[slug]?.id].filter(Boolean)
+      : Object.values(generatedResumes).map(r => r.id)
+    if (ids.length === 0) {
+      toast.error('Aucun resume genere pour le moment')
+      return
+    }
+    router.push(`/resumes/generated?ids=${ids.join(',')}`)
   }
 
   return (
@@ -799,13 +832,20 @@ export function PadletViewer({
             const isInBatch = selectedLevelSlugs.includes(slug)
             const isActive = activeLevelSlug === slug
             return (
-              <button
+              <div
                 key={slug}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleResumeLevel(slug)}
                 onDoubleClick={() => activateLevel(slug)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    toggleResumeLevel(slug)
+                  }
+                }}
                 className={cn(
-                  'rounded-2xl border p-3 text-left transition-all',
+                  'cursor-pointer rounded-2xl border p-3 text-left transition-all',
                   isActive
                     ? 'border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20'
                     : isInBatch
@@ -826,7 +866,37 @@ export function PadletViewer({
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {isActive ? 'Niveau actif' : isInBatch ? 'Dans la serie' : 'Ajouter a la serie'}
                 </p>
-              </button>
+                <div className="mt-3 grid gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 rounded-xl gap-1.5"
+                    disabled={generatingLevels[slug] || levelSelected === 0}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void generateLevelResume(slug)
+                    }}
+                  >
+                    {generatingLevels[slug] ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                    Generer
+                  </Button>
+                  {generatedResumes[slug] && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 rounded-xl gap-1.5"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openGeneratedResumes(slug)
+                      }}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Voir
+                    </Button>
+                  )}
+                </div>
+              </div>
             )
           })}
         </div>
@@ -857,6 +927,16 @@ export function PadletViewer({
             >
               <Sparkles className="h-4 w-4" />
               Generer la serie
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl gap-2"
+              onClick={() => openGeneratedResumes()}
+              disabled={Object.keys(generatedResumes).length === 0}
+            >
+              <Eye className="h-4 w-4" />
+              Voir les resumes generes
             </Button>
           </div>
         </div>

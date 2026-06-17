@@ -224,6 +224,7 @@ export async function POST(request: NextRequest) {
         level_id:         level.id,
         site_id:          group.site_id,
         title:            generatedData.title,
+        body_html:        htmlContent,
         status:           'draft',
         whatsapp_text:    generatedData.whatsapp_text,
         tokens_used:      result.tokensUsed,
