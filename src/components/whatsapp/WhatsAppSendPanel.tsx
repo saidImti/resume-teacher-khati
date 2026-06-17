@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Send,
   Loader2,
@@ -9,6 +9,10 @@ import {
   Clock,
   RefreshCw,
   Info,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -22,6 +26,8 @@ interface WhatsAppSendPanelProps {
   groupId: string
   groupName: string
   whatsappText: string
+  levelName?: string
+  sessionDate?: string
   onSendSuccess?: () => void
 }
 
@@ -75,6 +81,20 @@ function formatSentAt(dateStr: string | null): string {
   }
 }
 
+function formatHistoryDate(dateStr: string): string {
+  if (dateStr === 'sans-date') return 'Sans date'
+  try {
+    return new Date(`${dateStr}T12:00:00`).toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    })
+  } catch {
+    return dateStr
+  }
+}
+
 // ─── Composant ────────────────────────────────────────────────────────────────
 
 export function WhatsAppSendPanel({
@@ -82,13 +102,16 @@ export function WhatsAppSendPanel({
   groupId,
   groupName,
   whatsappText,
+  levelName,
+  sessionDate,
   onSendSuccess,
 }: WhatsAppSendPanelProps) {
   const [isSending, setIsSending] = useState(false)
   const [lastResult, setLastResult] = useState<SendResult | null>(null)
   const [sends, setSends] = useState<WhatsAppSend[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
+  const [showHistory, setShowHistory] = useState(true)
+  const [expandedSendId, setExpandedSendId] = useState<string | null>(null)
 
   // ── Charger l'historique ─────────────────────────────────────────────────
 
@@ -113,6 +136,17 @@ export function WhatsAppSendPanel({
     if (showHistory) loadHistory()
   }, [showHistory, loadHistory])
 
+  const sendsByDate = useMemo(() => {
+    const groups = new Map<string, WhatsAppSend[]>()
+    for (const send of sends) {
+      const source = send.sent_at ?? send.created_at
+      const key = source ? new Date(source).toISOString().slice(0, 10) : 'sans-date'
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(send)
+    }
+    return [...groups.entries()]
+  }, [sends])
+
   // ── Envoi ──────────────────────────────────────────────────────────────
 
   async function handleSend() {
@@ -121,7 +155,7 @@ export function WhatsAppSendPanel({
       const res = await fetch('/api/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeId, groupId }),
+        body: JSON.stringify({ resumeId, groupId, customMessage: whatsappText }),
       })
 
       const data = (await res.json()) as SendResult & { error?: string }
@@ -144,8 +178,8 @@ export function WhatsAppSendPanel({
       }
 
       onSendSuccess?.()
-      // Rafraîchir l'historique si ouvert
-      if (showHistory) loadHistory()
+      setShowHistory(true)
+      await loadHistory()
     } catch {
       toast.error('Erreur réseau. Réessayez.')
     } finally {
@@ -266,30 +300,52 @@ export function WhatsAppSendPanel({
               </p>
             ) : (
               <div className="divide-y divide-border">
-                {sends.map((send) => (
-                  <div
-                    key={send.id}
-                    className="flex items-center gap-3 px-4 py-3"
-                  >
-                    <StatusIcon status={send.status} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                        <StatusLabel status={send.status} />
-                        {send.recipient_count > 0 && (
-                          <span className="text-muted-foreground font-normal">
-                            · {send.recipient_count} destinataire
-                            {send.recipient_count > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {formatSentAt(send.sent_at)}
-                        {send.message_body && (
-                          <> · {send.message_body.length} car.</>
-                        )}
-                      </p>
+                {sendsByDate.map(([dateKey, dateSends]) => (
+                  <section key={dateKey}>
+                    <div className="flex items-center gap-2 bg-muted/30 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <CalendarDays className="h-3.5 w-3.5" />
+                      {formatHistoryDate(dateKey)}
                     </div>
-                  </div>
+                    <div className="divide-y divide-border">
+                      {dateSends.map((send) => {
+                        const expanded = expandedSendId === send.id
+                        return (
+                          <div key={send.id} className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSendId(expanded ? null : send.id)}
+                              className="flex w-full items-start gap-3 text-left"
+                            >
+                              <StatusIcon status={send.status} />
+                              <div className="min-w-0 flex-1">
+                                <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-foreground">
+                                  <StatusLabel status={send.status} />
+                                  {levelName && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{levelName}</span>}
+                                </p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatSentAt(send.sent_at)}
+                                  {sessionDate && <> · cours du {formatHistoryDate(sessionDate)}</>}
+                                  {send.message_body && <> · {send.message_body.length} caractères</>}
+                                </p>
+                              </div>
+                              {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                            </button>
+                            {expanded && (
+                              <div className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] p-3">
+                                <p className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                                  <FileText className="h-3.5 w-3.5" />
+                                  Résumé envoyé à {groupName}
+                                </p>
+                                <p className="max-h-64 overflow-y-auto whitespace-pre-wrap text-xs leading-5 text-foreground">
+                                  {send.message_body}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
                 ))}
 
                 {/* Bouton rafraîchir */}

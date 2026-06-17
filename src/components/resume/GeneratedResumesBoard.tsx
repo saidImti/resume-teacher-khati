@@ -97,7 +97,7 @@ export function GeneratedResumesBoard({ resumes }: Props) {
       <div className="sticky top-0 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background/95 p-2 shadow-sm backdrop-blur">
         <Button type="button" variant="outline" onClick={() => router.back()} className="gap-2 rounded-xl">
           <ChevronLeft className="h-4 w-4" />
-          Retour
+          Retour aux niveaux
         </Button>
         <Link href="/mes-padlets">
           <Button type="button" variant="ghost" className="rounded-xl">
@@ -230,7 +230,9 @@ export function GeneratedResumesBoard({ resumes }: Props) {
               resumeId={active.id}
               groupId={group?.id ?? ''}
               groupName={group?.name ?? 'Groupe'}
-              whatsappText={active.whatsapp_text ?? htmlToText(htmlById[active.id] ?? '')}
+              whatsappText={htmlToText(htmlById[active.id] ?? active.whatsapp_text ?? '')}
+              levelName={level?.name ?? 'Niveau'}
+              sessionDate={date}
             />
           </section>
 

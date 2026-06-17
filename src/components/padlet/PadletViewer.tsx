@@ -31,6 +31,7 @@ interface ManualItem {
   id:       string
   name:     string
   type:     LessonContentType
+  level:    string
   link?:    string
   selected: boolean
 }
@@ -256,7 +257,7 @@ function LeftPanelItem({ item, effType, recatOpen, onToggle, onOpenRecat, onReca
 
 function ManualAddForm({ defaultType, onAdd }: {
   defaultType: LessonContentType
-  onAdd:       (item: Omit<ManualItem, 'id' | 'selected'>) => void
+  onAdd:       (item: Omit<ManualItem, 'id' | 'selected' | 'level'>) => void
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -341,15 +342,22 @@ function ManualAddForm({ defaultType, onAdd }: {
 
 function CategoryCard({
   type, items, manualItems,
+  activeLevelSlug, availableLevelSlugs,
   onToggleItem, onToggleAll, onAddManual, onRemoveManual,
+  onRenameItem, onChangeItemType, onChangeItemLevel,
 }: {
   type:           LessonContentType
   items:          LessonItem[]
   manualItems:    ManualItem[]
+  activeLevelSlug: string
+  availableLevelSlugs: string[]
   onToggleItem:   (id: string) => void
   onToggleAll:    (select: boolean) => void
   onAddManual:    (item: Omit<ManualItem, 'id' | 'selected'>) => void
   onRemoveManual: (id: string) => void
+  onRenameItem: (id: string, name: string) => void
+  onChangeItemType: (id: string, type: LessonContentType) => void
+  onChangeItemLevel: (id: string, level: string) => void
 }) {
   const m         = CAT_META[type]
   const header    = CAT_HEADER[type]
@@ -441,44 +449,58 @@ function CategoryCard({
               {items.map(item => {
                 const ytId    = getYoutubeId(item.link)
                 const lvlSlug = item.levels?.[0]
-                const lm      = lvlSlug ? LEVEL_META[lvlSlug] : null
                 return (
-                  <label key={item.id}
+                  <div key={item.id}
                     className={cn(
-                      'flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors group',
+                      'grid gap-2 px-4 py-3 transition-colors sm:grid-cols-[auto_minmax(0,1fr)_180px_170px] sm:items-center',
                       item.selected ? 'bg-primary/[0.04]' : 'hover:bg-muted/20'
                     )}>
-                    <input type="checkbox" className="sr-only"
-                      checked={item.selected} onChange={() => onToggleItem(item.id)} />
-                    <div className="shrink-0">
+                    <button type="button" onClick={() => onToggleItem(item.id)} className="shrink-0">
                       {item.selected
                         ? <CheckSquare className="h-4 w-4 text-primary" />
                         : <Square className="h-4 w-4 text-muted-foreground/25 group-hover:text-muted-foreground/50 transition-colors" />}
+                    </button>
+                    <div className="min-w-0">
+                      <input
+                        value={item.name}
+                        onChange={event => onRenameItem(item.id, event.target.value)}
+                        aria-label="Nom de l'élément"
+                        className="w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-sm font-semibold outline-none transition hover:border-border focus:border-primary/40 focus:bg-background focus:ring-2 focus:ring-primary/15"
+                      />
+                      <div className="mt-1 flex items-center gap-2 px-2">
+                        {ytId && (
+                          <img src={`https://img.youtube.com/vi/${ytId}/default.jpg`} alt=""
+                            className="h-7 w-11 shrink-0 rounded-md object-cover border border-border/40"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        )}
+                        {item.link && <LinkBadge url={item.link} />}
+                      </div>
                     </div>
-                    {ytId && (
-                      <img src={`https://img.youtube.com/vi/${ytId}/default.jpg`} alt=""
-                        className="h-9 w-14 shrink-0 rounded-lg object-cover border border-border/40"
-                        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                    )}
-                    <p className={cn(
-                      'flex-1 min-w-0 text-sm font-medium leading-snug',
-                      item.selected ? 'text-foreground' : 'text-muted-foreground'
-                    )}>
-                      {item.name}
-                    </p>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {item.link && m.hasLink && <LinkBadge url={item.link} />}
-                      {lm && (
-                        <span title={lm.label}
-                          className={cn(
-                            'flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold border',
-                            badge
-                          )}>
-                          {lm.emoji}
-                        </span>
-                      )}
-                    </div>
-                  </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Catégorie</span>
+                      <select
+                        value={type}
+                        onChange={event => onChangeItemType(item.id, event.target.value as LessonContentType)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        {CAT_ORDER.map(option => (
+                          <option key={option} value={option}>{CAT_META[option].emoji} {CAT_META[option].label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Niveau</span>
+                      <select
+                        value={lvlSlug ?? activeLevelSlug}
+                        onChange={event => onChangeItemLevel(item.id, event.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        {availableLevelSlugs.map(option => (
+                          <option key={option} value={option}>{LEVEL_META[option]?.emoji} {LEVEL_META[option]?.label ?? option}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
                 )
               })}
             </div>
@@ -498,9 +520,29 @@ function CategoryCard({
                       ? <CheckSquare className="h-4 w-4 text-primary" />
                       : <Square className="h-4 w-4 text-muted-foreground/25" />}
                   </div>
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onToggleItem(mi.id)}>
-                    <p className="text-xs font-medium">{mi.name}</p>
-                    <p className="text-xs text-muted-foreground/40 italic">Ajouté manuellement</p>
+                  <div className="grid flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_180px_170px] sm:items-end">
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Élément manuel</span>
+                      <input
+                        value={mi.name}
+                        onChange={event => onRenameItem(mi.id, event.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Catégorie</span>
+                      <select value={mi.type} onChange={event => onChangeItemType(mi.id, event.target.value as LessonContentType)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20">
+                        {CAT_ORDER.map(option => <option key={option} value={option}>{CAT_META[option].emoji} {CAT_META[option].label}</option>)}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Niveau</span>
+                      <select value={mi.level} onChange={event => onChangeItemLevel(mi.id, event.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20">
+                        {availableLevelSlugs.map(option => <option key={option} value={option}>{LEVEL_META[option]?.emoji} {LEVEL_META[option]?.label ?? option}</option>)}
+                      </select>
+                    </label>
                   </div>
                   {mi.link && CAT_META[mi.type]?.hasLink && <LinkBadge url={mi.link} />}
                   <button type="button" onClick={() => onRemoveManual(mi.id)}
@@ -514,7 +556,7 @@ function CategoryCard({
 
           {/* Add manual */}
           <div className="px-4 py-3 border-t border-dashed border-border/40">
-            <ManualAddForm defaultType={type} onAdd={onAddManual} />
+            <ManualAddForm defaultType={type} onAdd={(item) => onAddManual({ ...item, level: activeLevelSlug })} />
           </div>
         </div>
       )}
@@ -588,13 +630,13 @@ export function PadletViewer({
   }
 
   function toggleResumeLevel(slug: string) {
-    if (selectedLevelSlugs.includes(slug)) {
-      const next = selectedLevelSlugs.filter(s => s !== slug)
-      setSelectedLevelSlugs(next)
-      if (activeLevelSlug === slug && next[0]) activateLevel(next[0])
-      return
-    }
     activateLevel(slug)
+  }
+
+  function toggleLevelInSeries(slug: string) {
+    setSelectedLevelSlugs(prev =>
+      prev.includes(slug) ? prev.filter(level => level !== slug) : [...prev, slug]
+    )
   }
 
   function effType(item: LessonItem): LessonContentType {
@@ -608,10 +650,21 @@ export function PadletViewer({
 
   function recategorize(id: string, type: LessonContentType) {
     setCategoryOverrides(prev => ({ ...prev, [id]: type }))
+    setManualItems(prev => prev.map(item => item.id === id ? { ...item, type } : item))
   }
 
   function addManualItem(item: Omit<ManualItem, 'id' | 'selected'>) {
     setManualItems(prev => [...prev, { ...item, id: `manual_${Date.now()}`, selected: true }])
+  }
+
+  function renameItem(id: string, name: string) {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, name } : item))
+    setManualItems(prev => prev.map(item => item.id === id ? { ...item, name } : item))
+  }
+
+  function changeItemLevel(id: string, level: string) {
+    setItems(prev => prev.map(item => item.id === id ? { ...item, levels: [level as LevelSlug] } : item))
+    setManualItems(prev => prev.map(item => item.id === id ? { ...item, level } : item))
   }
 
   function removeManualItem(id: string) {
@@ -619,8 +672,8 @@ export function PadletViewer({
   }
 
   function toggleCategory(type: LessonContentType, select: boolean) {
-    const ids  = new Set(items.filter(i => effType(i) === type).map(i => i.id))
-    const mIds = new Set(manualItems.filter(i => i.type === type).map(i => i.id))
+    const ids  = new Set(items.filter(i => effType(i) === type && (i.levels?.[0] ?? 'all') === activeLevelSlug).map(i => i.id))
+    const mIds = new Set(manualItems.filter(i => i.type === type && i.level === activeLevelSlug).map(i => i.id))
     setItems(prev => prev.map(i => ids.has(i.id) ? { ...i, selected: select } : i))
     setManualItems(prev => prev.map(i => mIds.has(i.id) ? { ...i, selected: select } : i))
   }
@@ -637,7 +690,7 @@ export function PadletViewer({
 
   const byCategory = useMemo(() => {
     const map = new Map<LessonContentType, LessonItem[]>()
-    for (const item of items) {
+    for (const item of items.filter(item => item.selected && (item.levels?.[0] ?? 'all') === activeLevelSlug)) {
       const t = categoryOverrides[item.id] ?? item.type
       if (!map.has(t)) map.set(t, [])
       map.get(t)!.push(item)
@@ -645,9 +698,9 @@ export function PadletViewer({
     return CAT_ORDER.map(t => ({
       type:        t,
       items:       map.get(t) ?? [],
-      manualItems: manualItems.filter(mi => mi.type === t),
-    }))
-  }, [items, manualItems, categoryOverrides])
+      manualItems: manualItems.filter(mi => mi.selected && mi.type === t && mi.level === activeLevelSlug),
+    })).filter(category => category.items.length > 0 || category.manualItems.length > 0)
+  }, [items, manualItems, categoryOverrides, activeLevelSlug])
 
   const selectedCount = useMemo(
     () => items.filter(i => i.selected).length + manualItems.filter(i => i.selected).length,
@@ -671,13 +724,10 @@ export function PadletViewer({
 
     const selectedPadlet = selectedItemsForLevel(activeLevelSlug)
     if (selectedPadlet.length === 0) { toast.error('Cochez au moins un élément dans le niveau actif'); return }
-    const selectedManual: LessonItem[] = manualItems.filter(i => i.selected).map(i => ({
-      id: i.id, name: i.name, type: i.type, link: i.link, selected: true, levels: [],
-    }))
 
     const groupOption = groups.find(g => g.id === selectedGroupId)
 
-    sessionStorage.setItem('padlet_prefill_lesson',  JSON.stringify({ theme: board.theme, items: [...selectedPadlet, ...selectedManual] }))
+    sessionStorage.setItem('padlet_prefill_lesson',  JSON.stringify({ theme: board.theme, items: selectedPadlet }))
     sessionStorage.setItem('padlet_prefill_groupId', selectedGroupId)
     sessionStorage.setItem('padlet_prefill_date',    sessionDate)
     sessionStorage.setItem('padlet_prefill_group',   JSON.stringify({
@@ -690,13 +740,24 @@ export function PadletViewer({
   }
 
   function selectedItemsForLevel(slug: string): LessonItem[] {
-    return items
+    const selectedPadlet = items
       .filter(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
       .map(i => ({
         ...i,
         id: i.id.replace(/__[a-z]+$/, ''),
         type: effType(i),
       }))
+    const selectedManual: LessonItem[] = manualItems
+      .filter(item => item.selected && item.level === slug)
+      .map(item => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        link: item.link,
+        selected: true,
+        levels: [slug as LevelSlug],
+      }))
+    return [...selectedPadlet, ...selectedManual]
   }
 
   function handleGenerateBatch() {
@@ -839,7 +900,6 @@ export function PadletViewer({
                 role="button"
                 tabIndex={0}
                 onClick={() => toggleResumeLevel(slug)}
-                onDoubleClick={() => activateLevel(slug)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
@@ -857,16 +917,32 @@ export function PadletViewer({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-lg">{meta?.emoji}</span>
-                  <span className={cn(
-                    'rounded-full px-2 py-0.5 text-[11px] font-bold',
-                    isInBatch ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                  )}>
-                    {levelSelected}/{levelItems.length}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
+                      {levelSelected}/{levelItems.length}
+                    </span>
+                    <button
+                      type="button"
+                      title={isInBatch ? 'Retirer de la série' : 'Ajouter à la série'}
+                      aria-label={isInBatch ? 'Retirer de la série' : 'Ajouter à la série'}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        toggleLevelInSeries(slug)
+                      }}
+                      className={cn(
+                        'rounded-lg border p-1 transition-colors',
+                        isInBatch
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-primary'
+                      )}
+                    >
+                      {isInBatch ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-sm font-extrabold">{meta?.label ?? slug}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {isActive ? 'Niveau actif' : isInBatch ? 'Dans la serie' : 'Ajouter a la serie'}
+                  {isActive ? 'Niveau affiché' : isInBatch ? 'Dans la série · cliquer pour ouvrir' : 'Ajouter à la série'}
                 </p>
                 <div className="mt-3 grid gap-2">
                   <Button
@@ -905,7 +981,7 @@ export function PadletViewer({
 
         <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            Astuce : un clic ajoute ou retire le niveau, double-clic active vite le niveau a organiser.
+            Un clic ouvre le niveau et conserve les sélections déjà préparées dans les autres niveaux.
           </p>
           <div className="flex gap-2">
             <Button
@@ -992,7 +1068,7 @@ export function PadletViewer({
             <p className="px-1 pb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
               📌 Source Padlet
             </p>
-            {byLevel.map(({ slug, items: lvItems }) => {
+            {byLevel.filter(level => level.slug === activeLevelSlug).map(({ slug, items: lvItems }) => {
               const lm      = LEVEL_META[slug] ?? { emoji: '📌', label: slug, color: 'border-gray-200 bg-gray-50', text: 'text-gray-900 dark:text-gray-200' }
               const lvSel   = lvItems.filter(i => i.selected).length
               return (
@@ -1035,16 +1111,28 @@ export function PadletViewer({
                 )
               })}
             </div>
+            {byCategory.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/[0.03] px-6 py-12 text-center">
+                <CheckSquare className="mx-auto h-8 w-8 text-primary/40" />
+                <p className="mt-3 text-sm font-bold">Aucun élément sélectionné pour ce niveau</p>
+                <p className="mt-1 text-xs text-muted-foreground">Coche une activité dans la source Padlet à gauche pour la préparer ici.</p>
+              </div>
+            )}
             {byCategory.map(({ type, items: catItems, manualItems: catManual }) => (
               <CategoryCard
                 key={type}
                 type={type}
                 items={catItems}
                 manualItems={catManual}
+                activeLevelSlug={activeLevelSlug}
+                availableLevelSlugs={availableLevelSlugs}
                 onToggleItem={toggleItem}
                 onToggleAll={select => toggleCategory(type, select)}
                 onAddManual={addManualItem}
                 onRemoveManual={removeManualItem}
+                onRenameItem={renameItem}
+                onChangeItemType={recategorize}
+                onChangeItemLevel={changeItemLevel}
               />
             ))}
           </div>
