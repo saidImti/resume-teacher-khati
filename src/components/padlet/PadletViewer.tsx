@@ -590,18 +590,13 @@ export function PadletViewer({
   const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>({})
   const [lastGeneratedByLevel, setLastGeneratedByLevel] = useState<Record<string, string>>({})
 
-  // Quand le groupe change → re-sélectionner automatiquement les items du bon niveau
+  // Quand le groupe change, afficher son niveau sans modifier les choix déjà cochés.
   useEffect(() => {
     const group = groups.find(g => g.id === selectedGroupId)
     const slug  = group?.levelSlug ?? ''
     if (!slug) return
     setActiveLevelSlug(slug)
     setSelectedLevelSlugs(prev => prev.includes(slug) ? prev : [...prev, slug])
-    setItems(prev => {
-      const hasSelectionForLevel = prev.some(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
-      if (hasSelectionForLevel) return prev
-      return prev.map(i => (i.levels?.[0] ?? 'all') === slug ? { ...i, selected: true } : i)
-    })
   }, [selectedGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const availableLevelSlugs = useMemo(() => {
@@ -622,11 +617,6 @@ export function PadletViewer({
     setActiveLevelSlug(slug)
     setSelectedLevelSlugs(prev => prev.includes(slug) ? prev : [...prev, slug])
     onGroupChange(group.id)
-    setItems(prev => {
-      const hasSelectionForLevel = prev.some(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
-      if (hasSelectionForLevel) return prev
-      return prev.map(i => (i.levels?.[0] ?? 'all') === slug ? { ...i, selected: true } : i)
-    })
   }
 
   function toggleResumeLevel(slug: string) {
@@ -1065,25 +1055,47 @@ export function PadletViewer({
 
           {/* LEFT — Source Padlet */}
           <div className="sticky top-2 max-h-[calc(100vh-150px)] overflow-y-scroll rounded-2xl border bg-background/60 p-2 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent">
-            <p className="px-1 pb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              📌 Source Padlet
-            </p>
-            {byLevel.filter(level => level.slug === activeLevelSlug).map(({ slug, items: lvItems }) => {
+            <div className="flex items-center justify-between gap-2 px-1 pb-2">
+              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                📌 Tout le Padlet
+              </p>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                {byLevel.length} niveaux
+              </span>
+            </div>
+            {byLevel.map(({ slug, items: lvItems }) => {
               const lm      = LEVEL_META[slug] ?? { emoji: '📌', label: slug, color: 'border-gray-200 bg-gray-50', text: 'text-gray-900 dark:text-gray-200' }
               const lvSel   = lvItems.filter(i => i.selected).length
+              const isActiveLevel = slug === activeLevelSlug
               return (
                 <div key={slug} className="mb-3">
-                  <div className={cn('flex items-center gap-2 rounded-xl px-3 py-2.5 mb-2 border-2', lm.color)}>
+                  <button
+                    type="button"
+                    onClick={() => activateLevel(slug)}
+                    className={cn(
+                      'mb-2 flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all',
+                      lm.color,
+                      isActiveLevel && 'ring-2 ring-primary/30 shadow-sm'
+                    )}
+                  >
                     <span className="text-lg">{lm.emoji}</span>
                     <span className={cn('text-sm font-extrabold flex-1 tracking-tight', lm.text)}>{lm.label}</span>
+                    {isActiveLevel && (
+                      <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+                        Ouvert
+                      </span>
+                    )}
                     <span className={cn('text-xs font-bold opacity-70', lm.text)}>{lvSel}/{lvItems.length}</span>
-                  </div>
+                  </button>
                   {lvItems.map(item => (
                     <LeftPanelItem key={item.id}
                       item={item}
                       effType={effType(item)}
                       recatOpen={recatOpen === item.id}
-                      onToggle={() => toggleItem(item.id)}
+                      onToggle={() => {
+                        if (!isActiveLevel) activateLevel(slug)
+                        toggleItem(item.id)
+                      }}
                       onOpenRecat={() => setRecatOpen(item.id)}
                       onRecat={t => { recategorize(item.id, t); setRecatOpen(null) }}
                       onCloseRecat={() => setRecatOpen(null)}
@@ -1099,7 +1111,7 @@ export function PadletViewer({
             {/* Mini overview bar */}
             <div className="flex items-center gap-2 flex-wrap px-1">
               <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                🗂️ Organisation
+                🗂️ Sélection {LEVEL_META[activeLevelSlug]?.label ?? activeLevelSlug}
               </span>
               {catStats.map(s => {
                 const m = CAT_META[s.type]
