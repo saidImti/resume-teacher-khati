@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Archive, CalendarDays, CheckCircle2, Loader2, MessageCircle, Save, Send, Sparkles } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Archive, CalendarDays, CheckCircle2, ChevronLeft, Loader2, MessageCircle, Save, Send, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ResumeEditor } from '@/components/resume/ResumeEditor'
@@ -40,6 +41,7 @@ interface Props {
 }
 
 export function GeneratedResumesBoard({ resumes }: Props) {
+  const router = useRouter()
   const [activeId, setActiveId] = useState(resumes[0]?.id ?? '')
   const [htmlById, setHtmlById] = useState<Record<string, string>>(() =>
     Object.fromEntries(resumes.map(resume => [resume.id, resume.body_html || sectionsToHtml(resume)]))
@@ -92,6 +94,21 @@ export function GeneratedResumesBoard({ resumes }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto bg-background p-4 sm:p-6">
+      <div className="sticky top-0 z-20 mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background/95 p-2 shadow-sm backdrop-blur">
+        <Button type="button" variant="outline" onClick={() => router.back()} className="gap-2 rounded-xl">
+          <ChevronLeft className="h-4 w-4" />
+          Retour
+        </Button>
+        <Link href="/mes-padlets">
+          <Button type="button" variant="ghost" className="rounded-xl">
+            Mes Padlets
+          </Button>
+        </Link>
+        <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
+          Tes modifications restent disponibles tant que tu ne quittes pas la série.
+        </span>
+      </div>
+
       <div className="mb-5 rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-violet-500/10 p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
