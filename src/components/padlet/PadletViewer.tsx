@@ -546,6 +546,7 @@ export function PadletViewer({
   const [activeLevelSlug, setActiveLevelSlug] = useState(initialSlug)
   const [generatingLevels, setGeneratingLevels] = useState<Record<string, boolean>>({})
   const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>({})
+  const [lastGeneratedByLevel, setLastGeneratedByLevel] = useState<Record<string, string>>({})
 
   // Quand le groupe change → re-sélectionner automatiquement les items du bon niveau
   useEffect(() => {
@@ -729,6 +730,7 @@ export function PadletViewer({
       }
       const generated = { id: data.resumeId as string, title: data.title as string }
       setGeneratedResumes(prev => ({ ...prev, [slug]: generated }))
+      setLastGeneratedByLevel(prev => ({ ...prev, [slug]: generated.id }))
       toast.success(`Resume ${LEVEL_META[slug]?.label ?? slug} genere`)
       return generated
     } catch (error) {
@@ -764,8 +766,8 @@ export function PadletViewer({
 
   function openGeneratedResumes(slug?: string) {
     const ids = slug
-      ? [generatedResumes[slug]?.id].filter(Boolean)
-      : Object.values(generatedResumes).map(r => r.id)
+      ? [generatedResumes[slug]?.id ?? lastGeneratedByLevel[slug]].filter(Boolean)
+      : Array.from(new Set([...Object.values(generatedResumes).map(r => r.id), ...Object.values(lastGeneratedByLevel)]))
     if (ids.length === 0) {
       toast.error('Aucun resume genere pour le moment')
       return
