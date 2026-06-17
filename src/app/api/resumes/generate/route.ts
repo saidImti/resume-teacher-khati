@@ -125,7 +125,6 @@ export async function POST(request: NextRequest) {
         level:levels!level_id ( id, name, slug, color, emoji )
       `)
       .eq('id', groupId)
-      .eq('user_id', user.id)
       .single()
 
     if (groupError || !group) {
