@@ -121,14 +121,21 @@ export async function POST(request: NextRequest) {
     const { data: group, error: groupError } = await admin
       .from('groups')
       .select(`
-        id, name, site_id, user_id,
+        id, name, site_id,
         level:levels!level_id ( id, name, slug, color, emoji )
       `)
       .eq('id', groupId)
       .single()
 
     if (groupError || !group) {
-      return NextResponse.json({ error: 'Groupe introuvable' }, { status: 404 })
+      console.error('Erreur recherche groupe pour generation:', { groupId, groupError })
+      return NextResponse.json(
+        {
+          error: groupError ? 'Erreur lecture groupe' : 'Groupe introuvable',
+          details: groupError?.message,
+        },
+        { status: groupError ? 500 : 404 }
+      )
     }
 
     const level = Array.isArray(group.level) ? group.level[0] : group.level
