@@ -15,7 +15,7 @@ export default async function PlanningPage() {
   const [sites, schedulesByDay, students, groupsRes] = await Promise.all([
     getSites(admin),
     getSchedulesByDay(admin).catch(() => ({})),
-    getStudents(admin, { status: 'active' }).catch(() => []),
+    getStudents(admin).catch(() => []),
     admin
       .from('groups')
       .select('*, site:sites(*), level:levels(*)')

@@ -327,7 +327,7 @@ export async function getStudents(supabase: SupabaseClient, filters?: {
 }) {
   let q = supabase
     .from('students')
-    .select('*, site:sites(*), level:levels(*), family:families(parent1_first,parent1_last,parent1_phone)')
+    .select('*, site:sites(*), level:levels(*), family:families(parent1_first,parent1_last,parent1_phone), enrollments(*, group:groups(*, level:levels(*), site:sites(*)))')
     .order('last_name')
 
   if (filters?.siteId)  q = q.eq('site_id',  filters.siteId)

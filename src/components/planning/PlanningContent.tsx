@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2, Copy } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { upsertSchedule, deleteSchedule } from '@/lib/supabase/queries'
+import { buildCapacitySummary } from '@/lib/planning-capacity'
 import { DAY_LABELS } from '@/types'
 import type { Group, Level, Site, Schedule, Student, DayOfWeek } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
@@ -62,14 +63,6 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  const studentCountBySite = useMemo(() => {
-    const map: Record<string, number> = {}
-    students.forEach(s => {
-      if (s.site_id) map[s.site_id] = (map[s.site_id] ?? 0) + 1
-    })
-    return map
-  }, [students])
-
   const filtered = useMemo(() => {
     const result: Record<number, Schedule[]> = {}
     DAYS.forEach(d => {
@@ -80,11 +73,60 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
     return result
   }, [localSchedules, filterSite])
 
+  const allCapacity = useMemo(
+    () => buildCapacitySummary(Object.values(localSchedules).flat(), students, groups),
+    [localSchedules, students, groups]
+  )
+  const visibleCapacity = useMemo(
+    () => buildCapacitySummary(Object.values(filtered).flat(), students, groups),
+    [filtered, students, groups]
+  )
+  const capacityByGroup = useMemo(
+    () => new Map(allCapacity.groups.map(group => [group.groupId, group])),
+    [allCapacity.groups]
+  )
+  const capacityBySite = useMemo(() => new Map(sites.map(site => {
+    const siteGroups = allCapacity.groups.filter(group => group.siteId === site.id)
+    const capacity = siteGroups.reduce((sum, group) => sum + group.capacity, 0)
+    const occupied = siteGroups.reduce((sum, group) => sum + group.occupied, 0)
+    return [site.id, {
+      occupied,
+      capacity,
+      available: Math.max(capacity - occupied, 0),
+      fullGroups: siteGroups.filter(group => group.isFull).length,
+    }]
+  })), [allCapacity.groups, sites])
+  const capacityByLevel = useMemo(() => {
+    const levels = new Map<string, {
+      key: string
+      label: string
+      emoji: string
+      occupied: number
+      capacity: number
+      fullGroups: number
+    }>()
+
+    visibleCapacity.groups.forEach(group => {
+      const key = `${group.siteId}:${group.levelId || group.levelName}`
+      const current = levels.get(key) ?? {
+        key,
+        label: group.levelName,
+        emoji: group.levelEmoji,
+        occupied: 0,
+        capacity: 0,
+        fullGroups: 0,
+      }
+      current.occupied += group.occupied
+      current.capacity += group.capacity
+      current.fullGroups += group.isFull ? 1 : 0
+      levels.set(key, current)
+    })
+
+    return Array.from(levels.values())
+  }, [visibleCapacity.groups])
+
   const totalSlots = Object.values(filtered).flat().length
   const activeDays = DAYS.filter(day => (filtered[day] ?? []).length > 0).length
-  const totalCapacity = Object.values(filtered).flat().reduce((sum, slot) => sum + slot.max_students, 0)
-  const busiestDay = DAYS.reduce((best, day) =>
-    (filtered[day]?.length ?? 0) > (filtered[best]?.length ?? 0) ? day : best, DAYS[0])
   const groupsForSelectedSite = groups.filter((group) => {
     const levelName = group.level?.name ?? group.name
     return (!modal.form.site_id || group.site_id === modal.form.site_id) && VISIBLE_LEVELS.includes(levelName)
@@ -224,10 +266,10 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                   </button>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <PlanningMetric label="Créneaux" value={totalSlots} helper="semaine type" />
-                  <PlanningMetric label="Jours actifs" value={activeDays} helper="sur 7 jours" />
-                  <PlanningMetric label="Capacité" value={totalCapacity} helper="places cumulées" />
-                  <PlanningMetric label="Jour chargé" value={DAY_LABELS[busiestDay] ?? '—'} helper={`${filtered[busiestDay]?.length ?? 0} cours`} />
+                  <PlanningMetric label="Inscrits" value={visibleCapacity.occupied} helper={`${visibleCapacity.occupancyRate}% d'occupation`} />
+                  <PlanningMetric label="Capacité réelle" value={visibleCapacity.capacity} helper={`${visibleCapacity.groups.length} groupes uniques`} />
+                  <PlanningMetric label="Places disponibles" value={visibleCapacity.available} helper={`${totalSlots} créneaux · ${activeDays} jours`} />
+                  <PlanningMetric label="Groupes complets" value={visibleCapacity.fullGroups} helper={visibleCapacity.fullGroups > 0 ? 'à surveiller' : 'aucun groupe saturé'} />
                 </div>
               </div>
               <div className="border-t border-border bg-muted/30 p-5 sm:p-6 lg:border-l lg:border-t-0">
@@ -262,20 +304,24 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-foreground">Charge par site</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Créneaux et élèves actifs, sans encombrer la lecture de la semaine.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Élèves réellement inscrits et capacité des groupes, sans compter deux fois leurs créneaux.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {sites.map((site, siteI) => {
-                const slotsCount = Object.values(localSchedules).flat().filter(s => s.site_id === site.id).length
-                const stuCount = studentCountBySite[site.id] ?? 0
+                const siteCapacity = capacityBySite.get(site.id)
+                const occupied = siteCapacity?.occupied ?? 0
+                const capacity = siteCapacity?.capacity ?? 0
+                const available = siteCapacity?.available ?? 0
                 return (
                   <button key={site.id} type="button" onClick={() => setFilterSite(filterSite === site.id ? 'all' : site.id)}
                     className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                       filterSite === site.id ? siteColor(siteI) : 'border-border bg-background text-muted-foreground hover:text-foreground'
                     }`}>
                     <span>{site.name}</span>
-                    <span className="font-bold">{slotsCount}</span>
-                    <span className="opacity-60">· {stuCount} él.</span>
+                    <span className="font-bold">{occupied}/{capacity}</span>
+                    <span className="opacity-60">
+                      · {siteCapacity?.fullGroups ? `${siteCapacity.fullGroups} complet${siteCapacity.fullGroups > 1 ? 's' : ''}` : `${available} places`}
+                    </span>
                   </button>
                 )
               })}
@@ -284,6 +330,53 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
           {groups.length === 0 && (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               Creez au moins un groupe pour pouvoir ajouter des creneaux au planning.
+            </div>
+          )}
+          {allCapacity.studentsWithoutEnrollment > 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {allCapacity.studentsWithoutEnrollment} élève{allCapacity.studentsWithoutEnrollment > 1 ? 's actifs ou en essai ne sont' : ' actif ou en essai n’est'} rattaché{allCapacity.studentsWithoutEnrollment > 1 ? 's' : ''} à aucun groupe en cours.
+            </div>
+          )}
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h2 className="text-sm font-semibold text-foreground">Capacité par niveau</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {filterSite === 'all' ? 'Tous les sites' : sites.find(site => site.id === filterSite)?.name}
+            </p>
+          </div>
+          {capacityByLevel.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted-foreground">Aucun groupe planifié pour ce filtre.</p>
+          ) : (
+            <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+              {capacityByLevel.map(level => {
+                const available = Math.max(level.capacity - level.occupied, 0)
+                const rate = level.capacity > 0 ? Math.round((level.occupied / level.capacity) * 100) : 0
+                return (
+                  <div key={level.key} className="bg-card p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{level.emoji} {level.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{level.occupied}/{level.capacity} inscrits · {rate}%</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                        level.fullGroups > 0
+                          ? 'bg-rose-100 text-rose-700'
+                          : 'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {level.fullGroups > 0 ? `${level.fullGroups} complet${level.fullGroups > 1 ? 's' : ''}` : `${available} places`}
+                      </span>
+                    </div>
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={`h-full rounded-full ${rate >= 100 ? 'bg-rose-500' : rate >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                        style={{ width: `${Math.min(rate, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </section>
@@ -319,6 +412,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                       slots.map(slot => {
                         const slotSiteIdx = sites.findIndex(sx => sx.id === slot.site_id)
                         const colorCls = siteColor(slotSiteIdx)
+                        const groupCapacity = capacityByGroup.get(slot.group_id)
                         return (
                           <div key={slot.id} className={`group relative rounded-xl border p-2.5 ${colorCls}`}>
                             <div className="absolute right-1.5 top-1.5 hidden gap-0.5 group-hover:flex">
@@ -362,8 +456,13 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                                 <MapPin className="h-2.5 w-2.5" />{slot.room}
                               </p>
                             )}
-                            <p className="mt-1 flex items-center gap-1 text-xs opacity-75">
-                              <Users className="h-2.5 w-2.5" />max {slot.max_students}
+                            <p className={`mt-1 flex items-center gap-1 text-xs font-semibold ${groupCapacity?.isFull ? 'text-rose-700' : 'opacity-75'}`}>
+                              <Users className="h-2.5 w-2.5" />
+                              {groupCapacity
+                                ? groupCapacity.isFull
+                                  ? `${groupCapacity.occupied}/${groupCapacity.capacity} · Complet`
+                                  : `${groupCapacity.occupied}/${groupCapacity.capacity} · ${groupCapacity.available} places`
+                                : `max ${slot.max_students}`}
                             </p>
                           </div>
                         )
