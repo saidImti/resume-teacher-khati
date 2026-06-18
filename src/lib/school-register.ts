@@ -29,6 +29,7 @@ export interface SchoolRegisterRow {
   paymentStatus: RegisterPaymentStatus
   priority: number
   invoiceCount: number
+  paymentInvoiceId: string | null
 }
 
 interface RegisterInput {
@@ -149,6 +150,9 @@ function createRow(
   const hasOverdue = invoices.some(invoice => invoice.status === 'overdue')
   const hasPartial = invoices.some(invoice => invoice.status === 'partial')
   const hasPending = invoices.some(invoice => invoice.status === 'pending')
+  const paymentInvoice = invoices.find(invoice =>
+    Number(invoice.amount_due) > Number(invoice.amount_paid)
+  ) ?? invoices[0]
 
   let paymentStatus: RegisterPaymentStatus
   let priority: number
@@ -198,5 +202,6 @@ function createRow(
     paymentStatus,
     priority,
     invoiceCount: invoices.length,
+    paymentInvoiceId: paymentInvoice?.id ?? null,
   }
 }

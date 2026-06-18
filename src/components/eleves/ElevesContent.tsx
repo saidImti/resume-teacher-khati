@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   BadgeEuro,
@@ -10,12 +11,15 @@ import {
   CircleDollarSign,
   Download,
   Search,
+  Save,
   ShieldAlert,
   UserPlus,
   Users,
   WalletCards,
+  X,
+  Loader2,
 } from 'lucide-react'
-import { buildSchoolRegister, type RegisterPaymentStatus } from '@/lib/school-register'
+import { buildSchoolRegister, type RegisterPaymentStatus, type SchoolRegisterRow } from '@/lib/school-register'
 import type { Family, Invoice, PricingRule, Site, Student, StudentStats } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 
@@ -87,9 +91,12 @@ export function ElevesContent({
   currentMonth,
   currentYear,
 }: Props) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [filterSite, setFilterSite] = useState('all')
   const [filterPayment, setFilterPayment] = useState<RegisterPaymentStatus | 'all' | 'attention'>('all')
+  const [managedRowId, setManagedRowId] = useState<string | null>(null)
+  const [savingAction, setSavingAction] = useState<string | null>(null)
 
   const register = useMemo(() => buildSchoolRegister({
     families,
@@ -141,6 +148,7 @@ export function ElevesContent({
   const activeStudents = stats ? stats.active + stats.trial : students.filter(student =>
     student.status === 'active' || student.status === 'trial'
   ).length
+  const managedRow = register.find(row => row.id === managedRowId) ?? null
 
   function exportRegisterCsv() {
     const headers = [
@@ -176,6 +184,86 @@ export function ElevesContent({
     link.download = `registre-familles-${currentYear}-${String(currentMonth).padStart(2, '0')}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function saveSpecialRate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!managedRow?.family) return
+    const form = new FormData(event.currentTarget)
+    setSavingAction('rate')
+    try {
+      const response = await fetch(`/api/families/${managedRow.family.id}/rate`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          primary_site_id: managedRow.family.primary_site_id ?? managedRow.siteIds[0] ?? null,
+          custom_monthly_rate: form.get('custom_monthly_rate'),
+          custom_rate_note: String(form.get('custom_rate_note') ?? '') || null,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Impossible de modifier le tarif')
+      router.refresh()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur tarif')
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  async function createInvoice() {
+    if (!managedRow?.family) return
+    setSavingAction('invoice')
+    try {
+      const response = await fetch('/api/invoices/current', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family_id: managedRow.family.id,
+          site_id: managedRow.family.primary_site_id ?? managedRow.siteIds[0] ?? null,
+          period_month: currentMonth,
+          period_year: currentYear,
+          amount_due: managedRow.expectedMonthly,
+          notes: `Échéance mensuelle ${MONTHS[currentMonth - 1]} ${currentYear}`,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Impossible de créer la facture')
+      router.refresh()
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur facture')
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!managedRow?.family || !managedRow.paymentInvoiceId) return
+    const form = new FormData(event.currentTarget)
+    setSavingAction('payment')
+    try {
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          family_id: managedRow.family.id,
+          invoice_id: managedRow.paymentInvoiceId,
+          amount: Number(form.get('amount')),
+          method: form.get('method'),
+          payment_date: form.get('payment_date'),
+          reference: String(form.get('reference') ?? '') || null,
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Impossible d’enregistrer le paiement')
+      router.refresh()
+      setManagedRowId(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur paiement')
+    } finally {
+      setSavingAction(null)
+    }
   }
 
   return (
@@ -392,13 +480,14 @@ export function ElevesContent({
                           </td>
                           <td className="px-4 py-4 text-right">
                             <div className="flex flex-col items-end gap-1.5">
-                              <Link
-                                href="/finances"
+                              <button
+                                type="button"
+                                onClick={() => setManagedRowId(row.id)}
                                 className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
                               >
                                 <WalletCards className="h-3.5 w-3.5" />
-                                Finances
-                              </Link>
+                                Gérer
+                              </button>
                               {row.students[0] && (
                                 <Link
                                   href={`/eleves/${row.students[0].id}`}
@@ -420,6 +509,165 @@ export function ElevesContent({
           )}
         </FadeIn>
       </div>
+
+      {managedRow && (
+        <FamilyManagementModal
+          row={managedRow}
+          currentMonth={currentMonth}
+          currentYear={currentYear}
+          savingAction={savingAction}
+          onClose={() => setManagedRowId(null)}
+          onSaveRate={saveSpecialRate}
+          onCreateInvoice={createInvoice}
+          onRecordPayment={recordPayment}
+        />
+      )}
+    </div>
+  )
+}
+
+function FamilyManagementModal({
+  row,
+  currentMonth,
+  currentYear,
+  savingAction,
+  onClose,
+  onSaveRate,
+  onCreateInvoice,
+  onRecordPayment,
+}: {
+  row: SchoolRegisterRow
+  currentMonth: number
+  currentYear: number
+  savingAction: string | null
+  onClose: () => void
+  onSaveRate: (event: React.FormEvent<HTMLFormElement>) => void
+  onCreateInvoice: () => void
+  onRecordPayment: (event: React.FormEvent<HTMLFormElement>) => void
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between border-b border-border bg-background px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Gestion famille</p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">{row.familyName}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">{row.students.length} enfant{row.students.length > 1 ? 's' : ''} · {row.siteNames.join(', ')}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {!row.family ? (
+          <div className="p-6">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              Ce dossier doit d’abord être rattaché à une famille avant de pouvoir gérer son tarif et sa facturation.
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-5 p-5 md:grid-cols-2">
+            <form onSubmit={onSaveRate} className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Tarif de la famille</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Tarif normal calculé : {formatMoney(row.normalMonthly)}</p>
+              <label className="mt-4 block">
+                <span className="text-xs font-medium text-foreground">Tarif mensuel spécial</span>
+                <input
+                  name="custom_monthly_rate"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={row.family.custom_monthly_rate ?? ''}
+                  placeholder="Laisser vide pour le tarif normal"
+                  className={modalInputCls}
+                />
+              </label>
+              <label className="mt-3 block">
+                <span className="text-xs font-medium text-foreground">Justification interne</span>
+                <textarea
+                  name="custom_rate_note"
+                  defaultValue={row.family.custom_rate_note ?? ''}
+                  rows={3}
+                  className={modalInputCls}
+                />
+              </label>
+              <button type="submit" disabled={savingAction !== null} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                {savingAction === 'rate' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Enregistrer le tarif
+              </button>
+            </form>
+
+            <div className="rounded-xl border border-border bg-card p-4">
+              <h3 className="text-sm font-semibold text-foreground">Facture du mois</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{MONTHS[currentMonth - 1]} {currentYear}</p>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <MiniAmount label="Facturé" value={row.invoiced} />
+                <MiniAmount label="Payé" value={row.paid} />
+                <MiniAmount label="Reste" value={row.remaining} />
+              </div>
+              <button
+                type="button"
+                onClick={onCreateInvoice}
+                disabled={savingAction !== null}
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+              >
+                {savingAction === 'invoice' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {row.invoiceCount > 0 ? 'Mettre à jour la facture' : `Créer la facture de ${formatMoney(row.expectedMonthly)}`}
+              </button>
+            </div>
+
+            <form onSubmit={onRecordPayment} className="rounded-xl border border-border bg-card p-4 md:col-span-2">
+              <h3 className="text-sm font-semibold text-foreground">Enregistrer un paiement</h3>
+              {!row.paymentInvoiceId ? (
+                <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+                  Créez d’abord la facture du mois.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                    <label>
+                      <span className="text-xs font-medium text-foreground">Montant</span>
+                      <input name="amount" type="number" min="0.01" step="0.01" defaultValue={row.remaining || row.expectedMonthly} required className={modalInputCls} />
+                    </label>
+                    <label>
+                      <span className="text-xs font-medium text-foreground">Mode</span>
+                      <select name="method" className={modalInputCls}>
+                        <option value="cash">Espèces</option>
+                        <option value="card">Carte</option>
+                        <option value="transfer">Virement</option>
+                        <option value="check">Chèque</option>
+                        <option value="other">Autre</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span className="text-xs font-medium text-foreground">Date</span>
+                      <input name="payment_date" type="date" defaultValue={today} required className={modalInputCls} />
+                    </label>
+                    <label>
+                      <span className="text-xs font-medium text-foreground">Référence</span>
+                      <input name="reference" placeholder="Optionnel" className={modalInputCls} />
+                    </label>
+                  </div>
+                  <button type="submit" disabled={savingAction !== null} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                    {savingAction === 'payment' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Valider le paiement
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MiniAmount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-muted/50 p-2">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-bold text-foreground">{formatMoney(value)}</p>
     </div>
   )
 }
@@ -517,3 +765,4 @@ function formatMoney(value: number) {
 }
 
 const selectCls = 'rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/25'
+const modalInputCls = 'mt-1.5 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/25'

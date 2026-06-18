@@ -15,12 +15,12 @@ export default async function EditStudentPage({ params }: Props) {
   if (!user) redirect('/auth/login')
 
   let student
-  try { student = await getStudentById(supabase, id) }
+  const admin = createAdminSupabaseClient()
+  try { student = await getStudentById(admin, id) }
   catch { notFound() }
 
-  const admin = createAdminSupabaseClient()
   const [sites, levels, students] = await Promise.all([
-    getSites(admin), getLevels(admin), getStudents(supabase),
+    getSites(admin), getLevels(admin), getStudents(admin),
   ])
 
   const families = Array.from(

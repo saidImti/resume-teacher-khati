@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { getStudentById, getEnrollmentsByStudent, getPaymentsByFamily } from '@/lib/supabase/queries'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { getStudentById, getEnrollmentsByStudent, getInvoices, getPaymentsByFamily } from '@/lib/supabase/queries'
 import { StudentProfile } from '@/components/eleves/StudentProfile'
 
 export const metadata: Metadata = { title: 'Fiche élève' }
@@ -13,17 +13,19 @@ export default async function StudentPage({ params }: Props) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const admin = createAdminSupabaseClient()
 
   let student
   try {
-    student = await getStudentById(supabase, id)
+    student = await getStudentById(admin, id)
   } catch {
     notFound()
   }
 
-  const [enrollments, payments] = await Promise.all([
-    getEnrollmentsByStudent(supabase, id),
-    student.family_id ? getPaymentsByFamily(supabase, student.family_id) : Promise.resolve([]),
+  const [enrollments, payments, invoices] = await Promise.all([
+    getEnrollmentsByStudent(admin, id),
+    student.family_id ? getPaymentsByFamily(admin, student.family_id) : Promise.resolve([]),
+    student.family_id ? getInvoices(admin, { familyId: student.family_id }) : Promise.resolve([]),
   ])
 
   return (
@@ -31,6 +33,7 @@ export default async function StudentPage({ params }: Props) {
       student={student}
       enrollments={enrollments}
       payments={payments}
+      invoices={invoices}
     />
   )
 }

@@ -4,14 +4,15 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ChevronLeft, Edit, Phone, Mail, MessageCircle, MapPin,
-  Calendar, Shield, Users, AlertCircle, Wallet, BookOpen,
+  Calendar, Shield, Users, AlertCircle, Wallet, BookOpen, Receipt,
 } from 'lucide-react'
-import type { Student, Enrollment, Payment } from '@/types'
+import type { Student, Enrollment, Payment, Invoice } from '@/types'
 
 interface Props {
   student: Student
   enrollments: Enrollment[]
   payments: Payment[]
+  invoices: Invoice[]
 }
 
 const STATUS_CONFIG = {
@@ -26,7 +27,7 @@ const PAYMENT_METHODS: Record<string, string> = {
 }
 
 
-export function StudentProfile({ student, enrollments, payments }: Props) {
+export function StudentProfile({ student, enrollments, payments, invoices }: Props) {
   const router = useRouter()
   const st = STATUS_CONFIG[student.status] ?? STATUS_CONFIG.active
   const family = student.family
@@ -37,6 +38,11 @@ export function StudentProfile({ student, enrollments, payments }: Props) {
     : null
 
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0)
+  const totalDue = invoices.reduce((sum, invoice) => sum + Number(invoice.amount_due), 0)
+  const remaining = invoices.reduce(
+    (sum, invoice) => sum + Math.max(Number(invoice.amount_due) - Number(invoice.amount_paid), 0),
+    0
+  )
 
   return (
     <div className="flex flex-col min-h-screen bg-[var(--color-bg)]">
@@ -153,6 +159,37 @@ export function StudentProfile({ student, enrollments, payments }: Props) {
             </Section>
 
             {/* Paiements */}
+            <Section icon={<Receipt className="h-4 w-4 text-violet-500" />} title={`Factures (${invoices.length})`}>
+              <div className="mb-3 grid grid-cols-3 gap-2">
+                <FinancialMetric label="Facturé" value={totalDue} />
+                <FinancialMetric label="Payé" value={totalPaid} tone="success" />
+                <FinancialMetric label="Reste" value={remaining} tone={remaining > 0 ? 'danger' : 'success'} />
+              </div>
+              {invoices.length === 0 ? (
+                <p className="text-sm text-[var(--color-text-muted)]">Aucune facture enregistrée pour cette famille.</p>
+              ) : (
+                <div className="space-y-2">
+                  {invoices.slice(0, 12).map(invoice => (
+                    <div key={invoice.id} className="flex items-center justify-between rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--color-text)]">
+                          {invoice.invoice_number ?? `Facture ${invoice.period_month}/${invoice.period_year}`}
+                        </p>
+                        <p className="text-xs text-[var(--color-text-muted)]">
+                          {String(invoice.period_month).padStart(2, '0')}/{invoice.period_year} · {invoice.status}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-[var(--color-text)]">{Number(invoice.amount_due).toFixed(2)} €</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">{Number(invoice.amount_paid).toFixed(2)} € payé</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            {/* Paiements */}
             <Section icon={<Wallet className="h-4 w-4 text-violet-500" />} title={`Paiements (${payments.length})`}>
               {payments.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">Aucun paiement enregistré.</p>
@@ -238,6 +275,27 @@ export function StudentProfile({ student, enrollments, payments }: Props) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function FinancialMetric({
+  label,
+  value,
+  tone = 'default',
+}: {
+  label: string
+  value: number
+  tone?: 'default' | 'success' | 'danger'
+}) {
+  return (
+    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+      <p className="text-xs text-[var(--color-text-muted)]">{label}</p>
+      <p className={`mt-1 text-base font-bold ${
+        tone === 'success' ? 'text-emerald-600' : tone === 'danger' ? 'text-red-600' : 'text-[var(--color-text)]'
+      }`}>
+        {value.toFixed(2)} €
+      </p>
     </div>
   )
 }
