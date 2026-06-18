@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Archive, BookOpen,
   Settings, ChevronRight, LogOut, Menu, Pin,
-  Users, CalendarDays, Wallet
+  Users, CalendarDays, Wallet, UsersRound
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui'
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
 
 const NAV_SCHOOL = [
   { href: '/eleves',      label: 'Élèves',      icon: Users           },
+  { href: '/eleves/familles-paiements', label: 'Familles & paiements', icon: UsersRound },
   { href: '/planning',    label: 'Planning',    icon: CalendarDays    },
   { href: '/finances',    label: 'Finances',    icon: Wallet          },
 ]
@@ -40,7 +41,9 @@ function NavItem({ item, pathname, sidebarOpen }: {
   sidebarOpen: boolean
 }) {
   const Icon = item.icon
-  const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
+  const isStudentParent = item.href === '/eleves'
+  const isStudentSubmenu = item.href.startsWith('/eleves/')
+  const isActive = pathname === item.href || (!isStudentParent && pathname.startsWith(item.href + '/'))
   return (
     <div className="relative group/nav">
       <Link
@@ -49,6 +52,7 @@ function NavItem({ item, pathname, sidebarOpen }: {
         aria-current={isActive ? 'page' : undefined}
         className={cn(
           'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors btn-press',
+          sidebarOpen && isStudentSubmenu && 'ml-5 border-l border-border rounded-l-none',
           isActive
             ? 'bg-primary/10 text-primary font-medium'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground'

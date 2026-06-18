@@ -70,6 +70,13 @@ export function buildSchoolRegister({
 
   const currentStudents = students.filter(student => CURRENT_STUDENT_STATUSES.has(student.status))
   const studentsByFamily = new Map<string, Student[]>()
+  const allStudentsByFamily = new Map<string, Student[]>()
+  students.forEach(student => {
+    if (!student.family_id) return
+    const familyStudents = allStudentsByFamily.get(student.family_id) ?? []
+    familyStudents.push(student)
+    allStudentsByFamily.set(student.family_id, familyStudents)
+  })
   currentStudents.forEach(student => {
     if (!student.family_id) return
     const familyStudents = studentsByFamily.get(student.family_id) ?? []
@@ -91,14 +98,15 @@ export function buildSchoolRegister({
     })
 
   const rows: SchoolRegisterRow[] = families
-    .filter(family => family.is_active && (studentsByFamily.get(family.id)?.length ?? 0) > 0)
+    .filter(family => family.is_active && (allStudentsByFamily.get(family.id)?.length ?? 0) > 0)
     .map(family => createRow(
       family.id,
       family,
-      studentsByFamily.get(family.id) ?? [],
+      allStudentsByFamily.get(family.id) ?? [],
       invoiceByFamily.get(family.id) ?? [],
       activeRuleBySite,
-      siteNameById
+      siteNameById,
+      studentsByFamily.get(family.id) ?? []
     ))
 
   currentStudents
@@ -127,10 +135,11 @@ function createRow(
   students: Student[],
   invoices: Invoice[],
   activeRuleBySite: Map<string, PricingRule>,
-  siteNameById: Map<string, string>
+  siteNameById: Map<string, string>,
+  billingStudents = students
 ): SchoolRegisterRow {
   const countsBySite = new Map<string, number>()
-  students.forEach(student => {
+  billingStudents.forEach(student => {
     const siteId = student.site_id ?? family?.primary_site_id
     if (siteId) countsBySite.set(siteId, (countsBySite.get(siteId) ?? 0) + 1)
   })
