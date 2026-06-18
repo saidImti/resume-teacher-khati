@@ -211,7 +211,7 @@ export function ElevesContent({
     }
   }
 
-  async function createInvoice() {
+  async function createInvoice(periodMonth: number, periodYear: number) {
     if (!managedRow?.family) return
     setSavingAction('invoice')
     try {
@@ -221,15 +221,16 @@ export function ElevesContent({
         body: JSON.stringify({
           family_id: managedRow.family.id,
           site_id: managedRow.family.primary_site_id ?? managedRow.siteIds[0] ?? null,
-          period_month: currentMonth,
-          period_year: currentYear,
+          period_month: periodMonth,
+          period_year: periodYear,
           amount_due: managedRow.expectedMonthly,
-          notes: `Échéance mensuelle ${MONTHS[currentMonth - 1]} ${currentYear}`,
+          notes: `Échéance mensuelle ${MONTHS[periodMonth - 1]} ${periodYear}`,
         }),
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? 'Impossible de créer la facture')
       router.refresh()
+      setManagedRowId(null)
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Erreur facture')
     } finally {
@@ -237,9 +238,9 @@ export function ElevesContent({
     }
   }
 
-  async function recordPayment(event: React.FormEvent<HTMLFormElement>) {
+  async function recordPayment(event: React.FormEvent<HTMLFormElement>, invoiceId: string) {
     event.preventDefault()
-    if (!managedRow?.family || !managedRow.paymentInvoiceId) return
+    if (!managedRow?.family || !invoiceId) return
     const form = new FormData(event.currentTarget)
     setSavingAction('payment')
     try {
@@ -248,7 +249,7 @@ export function ElevesContent({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           family_id: managedRow.family.id,
-          invoice_id: managedRow.paymentInvoiceId,
+          invoice_id: invoiceId,
           amount: Number(form.get('amount')),
           method: form.get('method'),
           payment_date: form.get('payment_date'),
@@ -513,6 +514,7 @@ export function ElevesContent({
       {managedRow && (
         <FamilyManagementModal
           row={managedRow}
+          invoices={invoices}
           currentMonth={currentMonth}
           currentYear={currentYear}
           savingAction={savingAction}
@@ -528,6 +530,7 @@ export function ElevesContent({
 
 function FamilyManagementModal({
   row,
+  invoices,
   currentMonth,
   currentYear,
   savingAction,
@@ -537,15 +540,35 @@ function FamilyManagementModal({
   onRecordPayment,
 }: {
   row: SchoolRegisterRow
+  invoices: Invoice[]
   currentMonth: number
   currentYear: number
   savingAction: string | null
   onClose: () => void
   onSaveRate: (event: React.FormEvent<HTMLFormElement>) => void
-  onCreateInvoice: () => void
-  onRecordPayment: (event: React.FormEvent<HTMLFormElement>) => void
+  onCreateInvoice: (month: number, year: number) => void
+  onRecordPayment: (event: React.FormEvent<HTMLFormElement>, invoiceId: string) => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
+  const academicStartYear = currentMonth >= 9 ? currentYear : currentYear - 1
+  const academicMonths = Array.from({ length: 12 }, (_, index) => {
+    const month = ((8 + index) % 12) + 1
+    const year = month >= 9 ? academicStartYear : academicStartYear + 1
+    return { month, year, key: `${year}-${String(month).padStart(2, '0')}` }
+  })
+  const [selectedPeriod, setSelectedPeriod] = useState(
+    `${currentYear}-${String(currentMonth).padStart(2, '0')}`
+  )
+  const [selectedYear, selectedMonth] = selectedPeriod.split('-').map(Number)
+  const familyInvoices = row.family
+    ? invoices.filter(invoice => invoice.family_id === row.family?.id && invoice.status !== 'cancelled')
+    : []
+  const selectedInvoice = familyInvoices.find(invoice =>
+    invoice.period_month === selectedMonth && invoice.period_year === selectedYear
+  )
+  const selectedInvoiced = Number(selectedInvoice?.amount_due ?? 0)
+  const selectedPaid = Number(selectedInvoice?.amount_paid ?? 0)
+  const selectedRemaining = Math.max(selectedInvoiced - selectedPaid, 0)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4">
       <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl">
@@ -599,27 +622,67 @@ function FamilyManagementModal({
             </form>
 
             <div className="rounded-xl border border-border bg-card p-4">
-              <h3 className="text-sm font-semibold text-foreground">Facture du mois</h3>
-              <p className="mt-1 text-xs text-muted-foreground">{MONTHS[currentMonth - 1]} {currentYear}</p>
+              <h3 className="text-sm font-semibold text-foreground">Échéancier mensuel</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Année scolaire {academicStartYear}-{academicStartYear + 1} · paiement attendu le 1er de chaque mois</p>
+              <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {academicMonths.map(period => {
+                  const invoice = familyInvoices.find(item =>
+                    item.period_month === period.month && item.period_year === period.year
+                  )
+                  const due = Number(invoice?.amount_due ?? 0)
+                  const paid = Number(invoice?.amount_paid ?? 0)
+                  const isPast = period.key < `${currentYear}-${String(currentMonth).padStart(2, '0')}`
+                  const status = !invoice
+                    ? 'À créer'
+                    : paid >= due
+                      ? 'Payé'
+                      : paid > 0
+                        ? 'Partiel'
+                        : isPast
+                          ? 'En retard'
+                          : 'À payer'
+                  return (
+                    <button
+                      key={period.key}
+                      type="button"
+                      onClick={() => setSelectedPeriod(period.key)}
+                      className={`rounded-lg border px-2 py-2 text-left transition ${
+                        selectedPeriod === period.key ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-accent'
+                      }`}
+                    >
+                      <p className="text-xs font-semibold capitalize text-foreground">{MONTHS[period.month - 1]}</p>
+                      <p className={`mt-1 text-[10px] font-medium ${
+                        status === 'Payé' ? 'text-emerald-600' : status === 'En retard' ? 'text-red-600' : 'text-muted-foreground'
+                      }`}>{status}</p>
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-4 text-sm font-semibold capitalize text-foreground">{MONTHS[(selectedMonth ?? 1) - 1]} {selectedYear}</p>
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <MiniAmount label="Facturé" value={row.invoiced} />
-                <MiniAmount label="Payé" value={row.paid} />
-                <MiniAmount label="Reste" value={row.remaining} />
+                <MiniAmount label="Facturé" value={selectedInvoiced} />
+                <MiniAmount label="Payé" value={selectedPaid} />
+                <MiniAmount label="Reste" value={selectedRemaining} />
               </div>
               <button
                 type="button"
-                onClick={onCreateInvoice}
+                onClick={() => onCreateInvoice(selectedMonth ?? currentMonth, selectedYear ?? currentYear)}
                 disabled={savingAction !== null}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
               >
                 {savingAction === 'invoice' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {row.invoiceCount > 0 ? 'Mettre à jour la facture' : `Créer la facture de ${formatMoney(row.expectedMonthly)}`}
+                {selectedInvoice ? 'Mettre à jour cette facture' : `Créer la facture de ${formatMoney(row.expectedMonthly)}`}
               </button>
             </div>
 
-            <form onSubmit={onRecordPayment} className="rounded-xl border border-border bg-card p-4 md:col-span-2">
+            <form
+              onSubmit={(event) => {
+                if (selectedInvoice) onRecordPayment(event, selectedInvoice.id)
+              }}
+              className="rounded-xl border border-border bg-card p-4 md:col-span-2"
+            >
               <h3 className="text-sm font-semibold text-foreground">Enregistrer un paiement</h3>
-              {!row.paymentInvoiceId ? (
+              {!selectedInvoice ? (
                 <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
                   Créez d’abord la facture du mois.
                 </p>
@@ -628,7 +691,7 @@ function FamilyManagementModal({
                   <div className="mt-4 grid gap-3 sm:grid-cols-4">
                     <label>
                       <span className="text-xs font-medium text-foreground">Montant</span>
-                      <input name="amount" type="number" min="0.01" step="0.01" defaultValue={row.remaining || row.expectedMonthly} required className={modalInputCls} />
+                      <input name="amount" type="number" min="0.01" step="0.01" defaultValue={selectedRemaining || row.expectedMonthly} required className={modalInputCls} />
                     </label>
                     <label>
                       <span className="text-xs font-medium text-foreground">Mode</span>
@@ -649,7 +712,11 @@ function FamilyManagementModal({
                       <input name="reference" placeholder="Optionnel" className={modalInputCls} />
                     </label>
                   </div>
-                  <button type="submit" disabled={savingAction !== null} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
+                  <button
+                    type="submit"
+                    disabled={savingAction !== null || selectedRemaining <= 0}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
                     {savingAction === 'payment' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                     Valider le paiement
                   </button>

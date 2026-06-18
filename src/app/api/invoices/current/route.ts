@@ -23,7 +23,16 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminSupabaseClient()
   const payload = parsed.data
-  const { data: existing } = await admin
+  const { data: family, error: familyError } = await admin
+    .from('families')
+    .select('user_id')
+    .eq('id', payload.family_id)
+    .single()
+  if (familyError || !family) {
+    return NextResponse.json({ error: 'Famille introuvable' }, { status: 404 })
+  }
+
+  const { data: existing, error: existingError } = await admin
     .from('invoices')
     .select('*')
     .eq('family_id', payload.family_id)
@@ -33,6 +42,7 @@ export async function POST(request: NextRequest) {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  if (existingError) return NextResponse.json({ error: existingError.message }, { status: 400 })
 
   if (existing) {
     const amountPaid = Number(existing.amount_paid)
@@ -57,7 +67,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await admin
     .from('invoices')
     .insert({
-      user_id: user.id,
+      user_id: family.user_id,
       family_id: payload.family_id,
       site_id: payload.site_id,
       period_month: payload.period_month,
@@ -67,7 +77,7 @@ export async function POST(request: NextRequest) {
       amount_paid: 0,
       discount: 0,
       status: 'pending',
-      due_date: new Date(payload.period_year, payload.period_month, 0).toISOString().slice(0, 10),
+      due_date: `${payload.period_year}-${String(payload.period_month).padStart(2, '0')}-01`,
       line_items: [],
       notes: payload.notes ?? null,
     })

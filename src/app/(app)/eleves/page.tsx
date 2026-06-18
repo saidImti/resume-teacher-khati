@@ -29,7 +29,7 @@ export default async function ElevesPage() {
     getStudentStats(admin).catch(() => null),
     getFamilies(admin).catch(() => []),
     getPricingRules(admin).catch(() => []),
-    getInvoices(admin, { month: currentMonth, year: currentYear }).catch(() => []),
+    getInvoices(admin).catch(() => []),
   ])
 
   return (

@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   const { data: payment, error: paymentError } = await admin
     .from('payments')
     .insert({
-      user_id: user.id,
+      user_id: invoice.user_id,
       family_id: payload.family_id,
       invoice_id: payload.invoice_id,
       amount: payload.amount,
