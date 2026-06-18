@@ -537,7 +537,7 @@ export function computeMonthlyAmount(
   if (rule.billing_type === 'per_session') {
     return (rule.price_per_session ?? 0) * nbActiveChildren * sessionsInMonth
   }
-  if (rule.billing_type === 'monthly_family') {
+  if (rule.billing_type === 'monthly_family' || rule.billing_type === 'monthly_per_child') {
     const rates: (number | null)[] = [
       rule.price_1_child,
       rule.price_2_children,
