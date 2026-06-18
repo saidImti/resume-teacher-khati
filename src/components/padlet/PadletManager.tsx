@@ -47,6 +47,7 @@ interface PadletManagerProps { groups: GroupOption[] }
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = 'teacher_khati_padlets_v1'
+const ACTIVE_BOARD_KEY = 'teacher_khati_active_padlet_v1'
 
 function loadBoards(): SavedBoard[] {
   if (typeof window === 'undefined') return []
@@ -119,7 +120,14 @@ export function PadletManager({ groups }: PadletManagerProps) {
   const [isAdding, setIsAdding]           = useState(false)
   const [showAddForm, setShowAddForm]     = useState(false)
 
-  const [activeBoard, setActiveBoard]     = useState<FetchedBoard | null>(null)
+  const [activeBoard, setActiveBoard]     = useState<FetchedBoard | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      return JSON.parse(sessionStorage.getItem(ACTIVE_BOARD_KEY) ?? 'null') as FetchedBoard | null
+    } catch {
+      return null
+    }
+  })
   const [isFetching, setIsFetching]       = useState(false)
   const [fetchError, setFetchError]       = useState<string | null>(null)
 
@@ -217,8 +225,10 @@ export function PadletManager({ groups }: PadletManagerProps) {
       const res  = await fetch(`/api/padlet/board/${b.id}`)
       const data = await res.json() as { error?: string; structuredItems?: LessonItem[]; boardTitle?: string }
       if (!res.ok) { setFetchError(data.error ?? 'Impossible de charger ce Padlet.'); return }
-      setActiveBoard({ board: { id: b.id, title: data.boardTitle ?? b.title, url: b.webUrl },
-        items: (data.structuredItems ?? []).map((i) => ({ ...i, selected: true })), theme: data.boardTitle ?? b.title })
+      const fetched = { board: { id: b.id, title: data.boardTitle ?? b.title, url: b.webUrl },
+        items: (data.structuredItems ?? []).map((i) => ({ ...i, selected: true })), theme: data.boardTitle ?? b.title }
+      setActiveBoard(fetched)
+      sessionStorage.setItem(ACTIVE_BOARD_KEY, JSON.stringify(fetched))
     } catch { setFetchError('Erreur réseau.') } finally { setIsFetching(false) }
   }
 
@@ -230,8 +240,10 @@ export function PadletManager({ groups }: PadletManagerProps) {
       })
       const data = await res.json() as { error?: string; structuredItems?: LessonItem[]; boardTitle?: string }
       if (!res.ok) { setFetchError(data.error ?? 'Impossible de charger ce Padlet.'); return }
-      setActiveBoard({ board: { id: b.id, title: data.boardTitle ?? b.title, url: b.url },
-        items: (data.structuredItems ?? []).map((i) => ({ ...i, selected: true })), theme: data.boardTitle ?? b.title })
+      const fetched = { board: { id: b.id, title: data.boardTitle ?? b.title, url: b.url },
+        items: (data.structuredItems ?? []).map((i) => ({ ...i, selected: true })), theme: data.boardTitle ?? b.title }
+      setActiveBoard(fetched)
+      sessionStorage.setItem(ACTIVE_BOARD_KEY, JSON.stringify(fetched))
     } catch { setFetchError('Erreur réseau.') } finally { setIsFetching(false) }
   }
 
@@ -296,7 +308,10 @@ export function PadletManager({ groups }: PadletManagerProps) {
       board={activeBoard} groups={groups}
       selectedGroupId={selectedGroupId} sessionDate={sessionDate}
       onGroupChange={setSelectedGroupId} onDateChange={setSessionDate}
-      onBack={() => setActiveBoard(null)}
+      onBack={() => {
+        sessionStorage.removeItem(ACTIVE_BOARD_KEY)
+        setActiveBoard(null)
+      }}
     />
   )
 

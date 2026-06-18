@@ -36,6 +36,32 @@ interface ManualItem {
   selected: boolean
 }
 
+interface PadletWorkspaceDraft {
+  items: LessonItem[]
+  selectionByLevel: Record<string, string[]>
+  categoryOverrides: Record<string, LessonContentType>
+  manualItems: ManualItem[]
+  selectedLevelSlugs: string[]
+  activeLevelSlug: string
+  generatedResumes: Record<string, { id: string; title: string }>
+  lastGeneratedByLevel: Record<string, string>
+  selectedGroupId: string
+  sessionDate: string
+}
+
+function workspaceKey(boardId: string) {
+  return `teacher_khati_padlet_workspace_v1_${boardId}`
+}
+
+function loadWorkspaceDraft(boardId: string): PadletWorkspaceDraft | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return JSON.parse(sessionStorage.getItem(workspaceKey(boardId)) ?? 'null') as PadletWorkspaceDraft | null
+  } catch {
+    return null
+  }
+}
+
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
 const LEVEL_ORDER: LevelSlug[] = ['preschoolers', 'kids', 'juniors', 'tweens', 'teenagers']
@@ -569,23 +595,37 @@ export function PadletViewer({
   board, groups, selectedGroupId, sessionDate, onGroupChange, onDateChange, onBack,
 }: PadletViewerProps) {
   const router = useRouter()
+  const initialDraftRef = useRef<PadletWorkspaceDraft | null>(loadWorkspaceDraft(board.board.id))
+  const draft = initialDraftRef.current
   const preschoolGroup = groups.find(group => group.levelSlug === 'preschoolers')
-  const initialSlug = preschoolGroup?.levelSlug || groups[0]?.levelSlug || 'preschoolers'
-  const didSetDefaultGroup = useRef(false)
+  const initialSlug = draft?.activeLevelSlug || preschoolGroup?.levelSlug || groups[0]?.levelSlug || 'preschoolers'
+  const didSetDefaultGroup = useRef(Boolean(draft))
 
   const [items,             setItems]             = useState<LessonItem[]>(() => {
-    return expandItems(board.items).map(item => ({ ...item, selected: false }))
+    return draft?.items ?? expandItems(board.items).map(item => ({ ...item, selected: false }))
   })
-  const [selectionByLevel, setSelectionByLevel] = useState<Record<string, string[]>>({})
-  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, LessonContentType>>({})
-  const [manualItems,       setManualItems]       = useState<ManualItem[]>([])
+  const [selectionByLevel, setSelectionByLevel] = useState<Record<string, string[]>>(draft?.selectionByLevel ?? {})
+  const [categoryOverrides, setCategoryOverrides] = useState<Record<string, LessonContentType>>(draft?.categoryOverrides ?? {})
+  const [manualItems,       setManualItems]       = useState<ManualItem[]>(draft?.manualItems ?? [])
   const [recatOpen,         setRecatOpen]         = useState<string | null>(null)
   const [viewMode,          setViewMode]          = useState<ViewMode>('split')
-  const [selectedLevelSlugs, setSelectedLevelSlugs] = useState<string[]>(() => [initialSlug])
+  const [selectedLevelSlugs, setSelectedLevelSlugs] = useState<string[]>(draft?.selectedLevelSlugs ?? [initialSlug])
   const [activeLevelSlug, setActiveLevelSlug] = useState(initialSlug)
   const [generatingLevels, setGeneratingLevels] = useState<Record<string, boolean>>({})
-  const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>({})
-  const [lastGeneratedByLevel, setLastGeneratedByLevel] = useState<Record<string, string>>({})
+  const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>(draft?.generatedResumes ?? {})
+  const [lastGeneratedByLevel, setLastGeneratedByLevel] = useState<Record<string, string>>(draft?.lastGeneratedByLevel ?? {})
+
+  useEffect(() => {
+    if (!draft) return
+    if (draft.selectedGroupId && selectedGroupId !== draft.selectedGroupId) {
+      onGroupChange(draft.selectedGroupId)
+    }
+    if (draft.sessionDate && sessionDate !== draft.sessionDate) {
+      onDateChange(draft.sessionDate)
+    }
+  // Restore once from the session snapshot.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (didSetDefaultGroup.current || !preschoolGroup) return
@@ -598,12 +638,33 @@ export function PadletViewer({
   // Quand le groupe change ensuite, afficher son niveau sans modifier les choix.
   useEffect(() => {
     if (!didSetDefaultGroup.current) return
+    if (draft?.selectedGroupId && selectedGroupId !== draft.selectedGroupId) return
     const group = groups.find(g => g.id === selectedGroupId)
     const slug  = group?.levelSlug ?? ''
     if (!slug) return
     setActiveLevelSlug(slug)
     setSelectedLevelSlugs(prev => prev.includes(slug) ? prev : [...prev, slug])
   }, [selectedGroupId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const snapshot: PadletWorkspaceDraft = {
+      items,
+      selectionByLevel,
+      categoryOverrides,
+      manualItems,
+      selectedLevelSlugs,
+      activeLevelSlug,
+      generatedResumes,
+      lastGeneratedByLevel,
+      selectedGroupId,
+      sessionDate,
+    }
+    sessionStorage.setItem(workspaceKey(board.board.id), JSON.stringify(snapshot))
+  }, [
+    activeLevelSlug, board.board.id, categoryOverrides, generatedResumes, items,
+    lastGeneratedByLevel, manualItems, selectedGroupId, selectedLevelSlugs,
+    selectionByLevel, sessionDate,
+  ])
 
   const availableLevelSlugs = useMemo(() => {
     const slugs = new Set(groups.map(g => g.levelSlug).filter(Boolean))

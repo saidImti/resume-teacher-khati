@@ -47,6 +47,7 @@ export function GeneratedResumesBoard({ resumes }: Props) {
     Object.fromEntries(resumes.map(resume => [resume.id, resume.body_html || sectionsToHtml(resume)]))
   )
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [savingAll, setSavingAll] = useState(false)
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
 
   const active = resumes.find(resume => resume.id === activeId) ?? resumes[0]
@@ -60,7 +61,7 @@ export function GeneratedResumesBoard({ resumes }: Props) {
     return [...map.entries()]
   }, [resumes])
 
-  async function saveResume(resume: GeneratedResume) {
+  async function saveResume(resume: GeneratedResume, silent = false) {
     setSavingId(resume.id)
     try {
       const response = await fetch(`/api/resumes/${resume.id}`, {
@@ -70,11 +71,29 @@ export function GeneratedResumesBoard({ resumes }: Props) {
       })
       if (!response.ok) throw new Error('Sauvegarde impossible')
       setSavedIds(prev => new Set(prev).add(resume.id))
-      toast.success('Résumé sauvegardé et rangé dans les archives')
+      if (!silent) toast.success('Résumé sauvegardé et rangé dans les archives')
+      return true
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Erreur de sauvegarde')
+      if (!silent) toast.error(error instanceof Error ? error.message : 'Erreur de sauvegarde')
+      return false
     } finally {
       setSavingId(null)
+    }
+  }
+
+  async function saveAllResumes() {
+    setSavingAll(true)
+    try {
+      const results = await Promise.all(resumes.map(resume => saveResume(resume, true)))
+      const saved = results.filter(Boolean).length
+      if (saved !== resumes.length) {
+        toast.error(`${saved}/${resumes.length} résumés sauvegardés. Réessaie pour les autres.`)
+        return
+      }
+      setSavedIds(new Set(resumes.map(resume => resume.id)))
+      toast.success(`${saved} résumés sauvegardés et classés dans les archives`)
+    } finally {
+      setSavingAll(false)
     }
   }
 
@@ -121,13 +140,24 @@ export function GeneratedResumesBoard({ resumes }: Props) {
               Les résumés sont sauvegardés en brouillon, classés par date, niveau, groupe et site.
             </p>
           </div>
-          <Link
-            href="/archives"
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold hover:bg-accent"
-          >
-            <Archive className="h-4 w-4" />
-            Voir toutes les archives
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={saveAllResumes}
+              disabled={savingAll}
+              className="gap-2 rounded-xl"
+            >
+              {savingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Sauvegarder toute la série
+            </Button>
+            <Link
+              href="/archives"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold hover:bg-accent"
+            >
+              <Archive className="h-4 w-4" />
+              Voir toutes les archives
+            </Link>
+          </div>
         </div>
       </div>
 
