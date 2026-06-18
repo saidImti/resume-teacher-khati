@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   BadgeEuro,
@@ -91,22 +90,23 @@ export function ElevesContent({
   currentMonth,
   currentYear,
 }: Props) {
-  const router = useRouter()
   const [search, setSearch] = useState('')
   const [filterSite, setFilterSite] = useState('all')
   const [filterPayment, setFilterPayment] = useState<RegisterPaymentStatus | 'all' | 'attention'>('all')
   const [managedRowId, setManagedRowId] = useState<string | null>(null)
   const [savingAction, setSavingAction] = useState<string | null>(null)
+  const [localFamilies, setLocalFamilies] = useState(families)
+  const [localInvoices, setLocalInvoices] = useState(invoices)
 
   const register = useMemo(() => buildSchoolRegister({
-    families,
+    families: localFamilies,
     students,
     pricingRules,
-    invoices,
+    invoices: localInvoices,
     sites,
     month: currentMonth,
     year: currentYear,
-  }), [families, students, pricingRules, invoices, sites, currentMonth, currentYear])
+  }), [localFamilies, students, pricingRules, localInvoices, sites, currentMonth, currentYear])
 
   const filtered = useMemo(() => register.filter(row => {
     const q = search.trim().toLowerCase()
@@ -203,7 +203,9 @@ export function ElevesContent({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? 'Impossible de modifier le tarif')
-      router.refresh()
+      setLocalFamilies(current => current.map(family =>
+        family.id === data.id ? data as Family : family
+      ))
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Erreur tarif')
     } finally {
@@ -211,8 +213,17 @@ export function ElevesContent({
     }
   }
 
-  async function createInvoice(periodMonth: number, periodYear: number) {
-    if (!managedRow?.family) return
+  function upsertLocalInvoice(invoice: Invoice) {
+    setLocalInvoices(current => {
+      const exists = current.some(item => item.id === invoice.id)
+      return exists
+        ? current.map(item => item.id === invoice.id ? invoice : item)
+        : [invoice, ...current]
+    })
+  }
+
+  async function createInvoice(periodMonth: number, periodYear: number): Promise<Invoice | null> {
+    if (!managedRow?.family) return null
     setSavingAction('invoice')
     try {
       const response = await fetch('/api/invoices/current', {
@@ -229,13 +240,34 @@ export function ElevesContent({
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error ?? 'Impossible de créer la facture')
-      router.refresh()
-      setManagedRowId(null)
+      upsertLocalInvoice(data as Invoice)
+      return data as Invoice
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Erreur facture')
+      return null
     } finally {
       setSavingAction(null)
     }
+  }
+
+  async function savePayment(invoiceId: string, amount: number, method: string, paymentDate: string, reference = '') {
+    if (!managedRow?.family) return null
+    const response = await fetch('/api/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        family_id: managedRow.family.id,
+        invoice_id: invoiceId,
+        amount,
+        method,
+        payment_date: paymentDate,
+        reference: reference || null,
+      }),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error ?? 'Impossible d’enregistrer le paiement')
+    upsertLocalInvoice(data.invoice as Invoice)
+    return data.invoice as Invoice
   }
 
   async function recordPayment(event: React.FormEvent<HTMLFormElement>, invoiceId: string) {
@@ -244,24 +276,55 @@ export function ElevesContent({
     const form = new FormData(event.currentTarget)
     setSavingAction('payment')
     try {
-      const response = await fetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          family_id: managedRow.family.id,
-          invoice_id: invoiceId,
-          amount: Number(form.get('amount')),
-          method: form.get('method'),
-          payment_date: form.get('payment_date'),
-          reference: String(form.get('reference') ?? '') || null,
-        }),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error ?? 'Impossible d’enregistrer le paiement')
-      router.refresh()
-      setManagedRowId(null)
+      await savePayment(
+        invoiceId,
+        Number(form.get('amount')),
+        String(form.get('method')),
+        String(form.get('payment_date')),
+        String(form.get('reference') ?? '')
+      )
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Erreur paiement')
+    } finally {
+      setSavingAction(null)
+    }
+  }
+
+  async function setMonthlySituation(
+    month: number,
+    year: number,
+    situation: 'paid' | 'pending' | 'overdue'
+  ) {
+    if (!managedRow?.family) return
+    setSavingAction(`month-${year}-${month}`)
+    try {
+      let invoice = localInvoices.find(item =>
+        item.family_id === managedRow.family?.id &&
+        item.period_month === month &&
+        item.period_year === year &&
+        item.status !== 'cancelled'
+      ) ?? null
+      if (!invoice) invoice = await createInvoice(month, year)
+      if (!invoice) return
+
+      if (situation === 'paid') {
+        const remaining = Math.max(Number(invoice.amount_due) - Number(invoice.amount_paid), 0)
+        if (remaining > 0) {
+          await savePayment(invoice.id, remaining, 'cash', new Date().toISOString().slice(0, 10))
+        }
+        return
+      }
+
+      const response = await fetch(`/api/invoices/${invoice.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: situation }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error ?? 'Impossible de modifier le statut')
+      upsertLocalInvoice(data as Invoice)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur de mise à jour')
     } finally {
       setSavingAction(null)
     }
@@ -514,7 +577,7 @@ export function ElevesContent({
       {managedRow && (
         <FamilyManagementModal
           row={managedRow}
-          invoices={invoices}
+          invoices={localInvoices}
           currentMonth={currentMonth}
           currentYear={currentYear}
           savingAction={savingAction}
@@ -522,6 +585,7 @@ export function ElevesContent({
           onSaveRate={saveSpecialRate}
           onCreateInvoice={createInvoice}
           onRecordPayment={recordPayment}
+          onSetSituation={setMonthlySituation}
         />
       )}
     </div>
@@ -538,6 +602,7 @@ function FamilyManagementModal({
   onSaveRate,
   onCreateInvoice,
   onRecordPayment,
+  onSetSituation,
 }: {
   row: SchoolRegisterRow
   invoices: Invoice[]
@@ -548,6 +613,7 @@ function FamilyManagementModal({
   onSaveRate: (event: React.FormEvent<HTMLFormElement>) => void
   onCreateInvoice: (month: number, year: number) => void
   onRecordPayment: (event: React.FormEvent<HTMLFormElement>, invoiceId: string) => void
+  onSetSituation: (month: number, year: number, situation: 'paid' | 'pending' | 'overdue') => void
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const academicStartYear = currentMonth >= 9 ? currentYear : currentYear - 1
@@ -664,15 +730,40 @@ function FamilyManagementModal({
                 <MiniAmount label="Payé" value={selectedPaid} />
                 <MiniAmount label="Reste" value={selectedRemaining} />
               </div>
-              <button
-                type="button"
-                onClick={() => onCreateInvoice(selectedMonth ?? currentMonth, selectedYear ?? currentYear)}
-                disabled={savingAction !== null}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-              >
-                {savingAction === 'invoice' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {selectedInvoice ? 'Mettre à jour cette facture' : `Créer la facture de ${formatMoney(row.expectedMonthly)}`}
-              </button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSetSituation(selectedMonth ?? currentMonth, selectedYear ?? currentYear, 'paid')}
+                  disabled={savingAction !== null || selectedRemaining <= 0 && Boolean(selectedInvoice)}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Marquer payé
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSetSituation(selectedMonth ?? currentMonth, selectedYear ?? currentYear, 'pending')}
+                  disabled={savingAction !== null}
+                  className="rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  À payer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSetSituation(selectedMonth ?? currentMonth, selectedYear ?? currentYear, 'overdue')}
+                  disabled={savingAction !== null}
+                  className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  En retard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onCreateInvoice(selectedMonth ?? currentMonth, selectedYear ?? currentYear)}
+                  disabled={savingAction !== null}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground disabled:opacity-50"
+                >
+                  {selectedInvoice ? 'Actualiser le montant' : 'Créer seulement'}
+                </button>
+              </div>
             </div>
 
             <form

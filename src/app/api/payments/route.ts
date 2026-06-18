@@ -54,11 +54,13 @@ export async function POST(request: NextRequest) {
   const amountPaid = Number(invoice.amount_paid) + payload.amount
   const amountDue = Number(invoice.amount_due)
   const status = amountPaid >= amountDue ? 'paid' : 'partial'
-  const { error: updateError } = await admin
+  const { data: updatedInvoice, error: updateError } = await admin
     .from('invoices')
     .update({ amount_paid: amountPaid, status })
     .eq('id', invoice.id)
+    .select('*, family:families(*), site:sites(*)')
+    .single()
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 400 })
 
-  return NextResponse.json(payment, { status: 201 })
+  return NextResponse.json({ payment, invoice: updatedInvoice }, { status: 201 })
 }
