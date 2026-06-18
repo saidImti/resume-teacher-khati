@@ -6,10 +6,8 @@ import {
   AlertCircle,
   ChevronRight,
   Download,
-  MapPin,
   Search,
   Sparkles,
-  TrendingDown,
   UserPlus,
   Users,
 } from 'lucide-react'
@@ -89,97 +87,70 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <div className="border-b border-border bg-card px-6 py-5">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-violet-600">
-              <Users className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">Eleves</h1>
-              <p className="text-sm text-muted-foreground">
-                {s.active + s.trial} actifs ou en essai - {s.departed} partis
-              </p>
-            </div>
-          </div>
-          <Link
-            href="/eleves/new"
-            className="flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-violet-700"
-          >
-            <UserPlus className="h-4 w-4" />
-            Inscrire un eleve
-          </Link>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-6">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
         <FadeIn>
-          <section className="rounded-2xl border border-violet-200 bg-violet-50/70 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white">
-                  <Sparkles className="h-5 w-5" />
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid lg:grid-cols-[1fr_340px]">
+              <div className="p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Vie scolaire</p>
+                    <h1 className="mt-2 text-2xl font-semibold text-foreground">Pilotage des élèves</h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Effectifs, familles, niveaux et situations à suivre dans un registre unique, clair et immédiatement actionnable.
+                    </p>
+                  </div>
+                  <Link
+                    href="/eleves/new"
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Inscrire un élève
+                  </Link>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">Suivi intelligent</p>
-                  <h2 className="mt-1 text-lg font-semibold text-violet-950">Priorite eleves</h2>
-                  <p className="mt-1 text-sm text-violet-800/80">
-                    {followUpCount > 0
-                      ? `${followUpCount} eleve${followUpCount > 1 ? 's' : ''} a suivre en priorite: essais ou suspensions.`
-                      : 'Aucun signal sensible: la base eleves est stable.'}
-                  </p>
+                <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <HeroMetric label="Effectif suivi" value={s.active + s.trial} helper={`${s.trial} en essai`} />
+                  <HeroMetric label="Élèves actifs" value={s.active} helper="inscriptions actives" />
+                  <HeroMetric label="Sites couverts" value={sites.length} helper="lieux d'enseignement" />
+                  <HeroMetric label="Départs" value={s.departed} helper="depuis la rentrée" />
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={exportStudentsCsv}
-                  className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
-                >
-                  <Download className="h-4 w-4" />
-                  Export CSV
-                </button>
-                <Link
-                  href="/finances"
-                  className="inline-flex items-center gap-2 rounded-xl border border-violet-200 bg-white px-4 py-2.5 text-sm font-medium text-violet-700 transition hover:bg-violet-100"
-                >
-                  <AlertCircle className="h-4 w-4" />
-                  Voir paiements
-                </Link>
+              <div className="border-t border-border bg-muted/30 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                <div className="flex h-full flex-col justify-between gap-5">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      Priorité du moment
+                    </div>
+                    <div className="mt-3 rounded-xl border border-border bg-background/80 p-4">
+                      <p className="text-lg font-semibold text-foreground">{followUpCount}</p>
+                      <p className="mt-1 text-sm font-medium text-foreground">dossier{followUpCount > 1 ? 's' : ''} à surveiller</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        {followUpCount > 0
+                          ? 'Élèves en essai ou suspendus nécessitant une décision.'
+                          : 'Aucun essai ni suspension en attente.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={exportStudentsCsv}
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
+                      <Download className="h-3.5 w-3.5" /> Exporter
+                    </button>
+                    <Link href="/finances"
+                      className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-accent">
+                      <AlertCircle className="h-3.5 w-3.5" /> Paiements
+                    </Link>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
         </FadeIn>
 
-        <FadeIn>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <KpiCard
-              label="Eleves actifs"
-              value={s.active + s.trial}
-              sub={`dont ${s.trial} en essai`}
-              icon={<Users className="h-5 w-5" />}
-              color="violet"
-            />
-            <KpiCard
-              label="Sites"
-              value={sites.length}
-              sub={sites.length > 0 ? 'configures' : 'a configurer'}
-              icon={<MapPin className="h-5 w-5" />}
-              color="blue"
-            />
-            <KpiCard
-              label="Departs"
-              value={s.departed}
-              sub="depuis la rentree"
-              icon={<TrendingDown className="h-5 w-5" />}
-              color="slate"
-            />
-          </div>
-        </FadeIn>
-
         <FadeIn delay={0.05}>
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-foreground">Repartition par niveau</h2>
@@ -191,7 +162,7 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
             </div>
             <div className="flex flex-wrap gap-3">
               {s.byLevel.map(({ level, count }) => (
-                <div key={level.id} className="flex items-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5">
+                <div key={level.id} className="flex min-w-[150px] flex-1 items-center gap-3 rounded-xl border border-border bg-background px-4 py-3">
                   <span className="text-lg">{level.emoji}</span>
                   <div>
                     <p className="text-sm font-medium text-foreground">{level.name}</p>
@@ -205,7 +176,7 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
 
         <FadeIn delay={0.08}>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[220px] flex-1">
+            <div className="relative min-w-[260px] flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={search}
@@ -254,7 +225,7 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
               </Link>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-background">
@@ -324,34 +295,13 @@ export function ElevesContent({ sites, levels, students, stats }: Props) {
   )
 }
 
-function KpiCard({
-  label,
-  value,
-  sub,
-  icon,
-  color,
-}: {
-  label: string
-  value: number
-  sub: string
-  icon: React.ReactNode
-  color: string
-}) {
-  const colors: Record<string, string> = {
-    violet: 'bg-violet-50 text-violet-600',
-    blue: 'bg-blue-50 text-blue-600',
-    indigo: 'bg-indigo-50 text-indigo-600',
-    slate: 'bg-slate-100 text-slate-500',
-  }
+function HeroMetric({ label, value, helper }: { label: string; value: number; helper: string }) {
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
-      <div className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${colors[color]}`}>
-        {icon}
-      </div>
-      <div className="min-w-0">
+    <div className="rounded-xl border border-border bg-background/70 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-2 flex items-end justify-between gap-2">
         <p className="text-2xl font-bold leading-none text-foreground">{value}</p>
-        <p className="mt-1 text-sm font-medium leading-tight text-foreground">{label}</p>
-        <p className="text-xs leading-tight text-muted-foreground">{sub}</p>
+        <p className="pb-0.5 text-right text-[11px] text-muted-foreground">{helper}</p>
       </div>
     </div>
   )

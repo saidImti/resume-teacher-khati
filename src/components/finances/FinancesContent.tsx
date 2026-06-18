@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react'
 import {
-  Wallet, TrendingUp, AlertCircle, CheckCircle2, Clock,
   Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
@@ -301,56 +300,41 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--color-bg)]">
-      {/* Header */}
-      <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5">
-        <div className="mx-auto max-w-7xl flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
-              <Wallet className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-[var(--color-text)]">Finances</h1>
-              <p className="text-sm text-[var(--color-text-muted)]">Tarifs · Facturation · Paiements — {currentYear}</p>
-            </div>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-1">
-            {(['dashboard', 'factures', 'tarifs'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium capitalize transition-all ${
-                  tab === t
-                    ? 'bg-[var(--color-surface)] text-emerald-600 shadow-sm'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
-                }`}
-              >
-                {t === 'dashboard' ? 'Vue d\'ensemble' : t === 'factures' ? 'Factures' : 'Tarifs'}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl w-full px-6 py-6">
-        <div className="mb-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-emerald-600">Pilotage financier</p>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Ce qu'il faut surveiller</h2>
-              <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                Un espace premium doit guider les relances, pas seulement afficher des chiffres.
-              </p>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
+        <FadeIn>
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid lg:grid-cols-[1fr_380px]">
+              <div className="p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-emerald-500">Direction financière</p>
+                    <h1 className="mt-2 text-2xl font-semibold text-foreground">Pilotage des finances</h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Tarifs, situations particulières, facturation et paiements réunis dans un parcours de gestion unique.
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setTab('tarifs')}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                    <Plus className="h-4 w-4" /> Nouveau tarif
+                  </button>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <FinanceMetric label="Encaissé" value={`${totalPaid.toFixed(0)} €`} helper="paiements reçus" />
+                  <FinanceMetric label="À encaisser" value={`${totalUnpaid.toFixed(0)} €`} helper="reste à percevoir" />
+                  <FinanceMetric label="Retards" value={overdueCount} helper="factures critiques" />
+                  <FinanceMetric label="Tarifs actifs" value={activeRuleBySite.size} helper={`${specialRateFamilies.length} famille${specialRateFamilies.length > 1 ? 's' : ''} aidée${specialRateFamilies.length > 1 ? 's' : ''}`} />
+                </div>
+              </div>
+              <div className="border-t border-border bg-muted/30 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                <p className="text-sm font-semibold text-foreground">Centre d’attention</p>
+                <div className="mt-3 grid gap-2">
               {financeActions.map((item) => (
                 <button
                   key={item.title}
                   type="button"
                   onClick={() => setTab(item.tab)}
-                  className={`rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5 ${
+                  className={`rounded-xl border px-4 py-3 text-left transition ${
                     item.done
                       ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                       : 'border-amber-200 bg-amber-50 text-amber-800'
@@ -360,59 +344,58 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                   <p className="mt-1 text-xs opacity-80">{item.text}</p>
                 </button>
               ))}
+                </div>
+              </div>
             </div>
+          </section>
+        </FadeIn>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-2">
+          <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
+            {(['dashboard', 'factures', 'tarifs'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition ${
+                  tab === t ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}>
+                {t === 'dashboard' ? 'Vue d’ensemble' : t === 'factures' ? 'Factures' : 'Tarifs & aides'}
+              </button>
+            ))}
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={exportInvoicesCsv}
-              className="inline-flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-2 text-sm font-medium text-[var(--color-text)] transition hover:bg-[var(--color-surface)]"
+              disabled={invoices.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition hover:bg-accent disabled:opacity-40"
             >
               <Download className="h-4 w-4" />
               Export factures CSV
             </button>
-          </div>
         </div>
 
         {/* ── DASHBOARD ── */}
         {tab === 'dashboard' && (
           <div className="space-y-6">
-            <FadeIn>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                <KpiCard
-                  label="Encaissé"
-                  value={`${totalPaid.toFixed(0)} €`}
-                  sub="total paiements reçus"
-                  icon={<CheckCircle2 className="h-5 w-5" />}
-                  color="emerald"
-                />
-                <KpiCard
-                  label="À encaisser"
-                  value={`${totalUnpaid.toFixed(0)} €`}
-                  sub="solde restant dû"
-                  icon={<Clock className="h-5 w-5" />}
-                  color="amber"
-                />
-                <KpiCard
-                  label="En retard"
-                  value={`${overdueCount}`}
-                  sub={overdueCount > 1 ? 'factures impayees' : 'facture impayee'}
-                  icon={<AlertCircle className="h-5 w-5" />}
-                  color="red"
-                />
-                <KpiCard
-                  label="Total facturé"
-                  value={`${totalDue.toFixed(0)} €`}
-                  sub={`${invoices.length} factures`}
-                  icon={<TrendingUp className="h-5 w-5" />}
-                  color="blue"
-                />
-              </div>
-            </FadeIn>
-
-            {/* Graphique mensuel */}
             <FadeIn delay={0.05}>
-              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
+              {invoices.length === 0 ? (
+                <section className="grid gap-4 rounded-xl border border-dashed border-primary/30 bg-primary/[0.04] p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">Prochaine étape</p>
+                    <h2 className="mt-2 text-lg font-semibold text-foreground">Initialiser la facturation</h2>
+                    <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Les tarifs existent déjà. La prochaine étape consiste à générer les premières échéances pour transformer cette page en véritable suivi d’encaissement.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setTab('tarifs')} className="rounded-lg border border-border bg-background px-4 py-2.5 text-sm font-medium hover:bg-accent">
+                      Vérifier les tarifs
+                    </button>
+                    <button type="button" onClick={() => setTab('factures')} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                      Préparer les factures
+                    </button>
+                  </div>
+                </section>
+              ) : (
+              <div className="rounded-xl border border-border bg-card p-6">
                 <h2 className="mb-6 text-sm font-semibold text-[var(--color-text)]">
                   Revenus mensuels {currentYear}
                 </h2>
@@ -444,6 +427,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                   <div className="flex items-center gap-1.5"><div className="h-3 w-3 rounded bg-emerald-200" />Facturé</div>
                 </div>
               </div>
+              )}
             </FadeIn>
 
             {/* Répartition par site */}
@@ -455,7 +439,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                   const siteDue  = siteInvoices.reduce((s, i) => s + i.amount_due,  0)
                   const rule = localPricingRules.find(r => r.site_id === site.id && r.is_active)
                   return (
-                    <div key={site.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+                    <div key={site.id} className="rounded-xl border border-border bg-card p-5">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-[var(--color-text)]">{site.name}</h3>
                         {rule && (
@@ -912,23 +896,22 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   )
 }
 
-function KpiCard({ label, value, sub, icon, color }: {
-  label: string; value: string; sub: string; icon: React.ReactNode; color: string
+function FinanceMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string
+  value: number | string
+  helper: string
 }) {
-  const colors: Record<string, string> = {
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber:   'bg-amber-50 text-amber-600',
-    red:     'bg-red-50 text-red-600',
-    blue:    'bg-blue-50 text-blue-600',
-  }
   return (
-    <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-      <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl ${colors[color]}`}>
-        {icon}
+    <div className="rounded-xl border border-border bg-background/70 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <p className="truncate text-xl font-bold leading-none text-foreground">{value}</p>
+        <p className="pb-0.5 text-right text-[11px] text-muted-foreground">{helper}</p>
       </div>
-      <p className="text-2xl font-bold text-[var(--color-text)]">{value}</p>
-      <p className="mt-0.5 text-sm font-medium text-[var(--color-text)]">{label}</p>
-      <p className="text-xs text-[var(--color-text-muted)]">{sub}</p>
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Calendar, Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2, Copy } from 'lucide-react'
+import { Users, Clock, MapPin, Plus, Pencil, Trash2, X, Save, Loader2, Copy } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { upsertSchedule, deleteSchedule } from '@/lib/supabase/queries'
 import { DAY_LABELS } from '@/types'
@@ -81,6 +81,10 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
   }, [localSchedules, filterSite])
 
   const totalSlots = Object.values(filtered).flat().length
+  const activeDays = DAYS.filter(day => (filtered[day] ?? []).length > 0).length
+  const totalCapacity = Object.values(filtered).flat().reduce((sum, slot) => sum + slot.max_students, 0)
+  const busiestDay = DAYS.reduce((best, day) =>
+    (filtered[day]?.length ?? 0) > (filtered[best]?.length ?? 0) ? day : best, DAYS[0])
   const groupsForSelectedSite = groups.filter((group) => {
     const levelName = group.level?.name ?? group.name
     return (!modal.form.site_id || group.site_id === modal.form.site_id) && VISIBLE_LEVELS.includes(levelName)
@@ -196,57 +200,85 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
   const inputCls = 'w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-colors'
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--color-bg)]">
-      {/* Header */}
-      <div className="border-b border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-5">
-        <div className="mx-auto max-w-7xl flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 text-blue-600">
-              <Calendar className="h-5 w-5" />
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
+        <FadeIn>
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid lg:grid-cols-[1fr_340px]">
+              <div className="p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-sky-500">Organisation pédagogique</p>
+                    <h1 className="mt-2 text-2xl font-semibold text-foreground">Cockpit de la semaine</h1>
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                      Visualisez la charge, les lieux et les niveaux avant d’ajouter ou de déplacer un créneau.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openNew(new Date().getDay())}
+                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Nouveau créneau
+                  </button>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <PlanningMetric label="Créneaux" value={totalSlots} helper="semaine type" />
+                  <PlanningMetric label="Jours actifs" value={activeDays} helper="sur 7 jours" />
+                  <PlanningMetric label="Capacité" value={totalCapacity} helper="places cumulées" />
+                  <PlanningMetric label="Jour chargé" value={DAY_LABELS[busiestDay] ?? '—'} helper={`${filtered[busiestDay]?.length ?? 0} cours`} />
+                </div>
+              </div>
+              <div className="border-t border-border bg-muted/30 p-5 sm:p-6 lg:border-l lg:border-t-0">
+                <div className="flex h-full flex-col justify-between gap-5">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Filtrer le planning</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">Concentrez la semaine sur un lieu d’enseignement.</p>
+                    <select
+                      value={filterSite}
+                      onChange={e => setFilterSite(e.target.value)}
+                      className="mt-4 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/25"
+                    >
+                      <option value="all">Tous les sites</option>
+                      {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Link href="/settings/groups/new" className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent">
+                      <Users className="h-3.5 w-3.5" /> Groupes
+                    </Link>
+                    <Link href="/settings/sites" className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent">
+                      <MapPin className="h-3.5 w-3.5" /> Sites
+                    </Link>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-[var(--color-text)]">Planning</h1>
-              <p className="text-sm text-[var(--color-text-muted)]">{totalSlots} créneau{totalSlots > 1 ? 'x' : ''} · semaine type</p>
-            </div>
-          </div>
-          <select
-            value={filterSite}
-            onChange={e => setFilterSite(e.target.value)}
-            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-          >
-            <option value="all">Tous les sites</option>
-            {sites.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+          </section>
+        </FadeIn>
 
-      <div className="mx-auto max-w-7xl w-full px-6 py-6">
-        <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50/70 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <section className="rounded-xl border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-blue-700">Semaine type</p>
-              <h2 className="mt-1 text-lg font-semibold text-blue-950">Organiser les cours sans identifiants techniques</h2>
-              <p className="mt-1 text-sm text-blue-800/80">
-                Choisissez un jour, selectionnez un groupe, puis le site se synchronise automatiquement.
-              </p>
+              <h2 className="text-sm font-semibold text-foreground">Charge par site</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Créneaux et élèves actifs, sans encombrer la lecture de la semaine.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Link
-                href="/settings/groups/new"
-                className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
-              >
-                <Plus className="h-4 w-4" />
-                Nouveau groupe
-              </Link>
-              <Link
-                href="/settings/sites"
-                className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
-              >
-                <MapPin className="h-4 w-4" />
-                Sites
-              </Link>
+              {sites.map((site, siteI) => {
+                const slotsCount = Object.values(localSchedules).flat().filter(s => s.site_id === site.id).length
+                const stuCount = studentCountBySite[site.id] ?? 0
+                return (
+                  <button key={site.id} type="button" onClick={() => setFilterSite(filterSite === site.id ? 'all' : site.id)}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      filterSite === site.id ? siteColor(siteI) : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                    }`}>
+                    <span>{site.name}</span>
+                    <span className="font-bold">{slotsCount}</span>
+                    <span className="opacity-60">· {stuCount} él.</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
           {groups.length === 0 && (
@@ -254,36 +286,16 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
               Creez au moins un groupe pour pouvoir ajouter des creneaux au planning.
             </div>
           )}
-        </div>
-
-        {/* KPIs par site */}
-        <FadeIn>
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {sites.map((site, siteI) => {
-              const slotsCount = Object.values(localSchedules).flat().filter(s => s.site_id === site.id).length
-              const stuCount = studentCountBySite[site.id] ?? 0
-              const colors = siteColor(siteI).split(' ')
-              return (
-                <div key={site.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-                  <div className={`mb-2 inline-flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${colors[0]} ${colors[2]}`}>
-                    {site.name.slice(0, 2).toUpperCase()}
-                  </div>
-                  <p className="text-lg font-bold text-[var(--color-text)]">{slotsCount}</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{site.name}</p>
-                  <p className="text-xs text-[var(--color-text-muted)]">{stuCount} élève{stuCount > 1 ? 's' : ''} actifs</p>
-                </div>
-              )
-            })}
-          </div>
-        </FadeIn>
+        </section>
 
         {/* Grille semaine */}
         <FadeIn delay={0.05}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+          <div className="overflow-x-auto pb-2">
+          <div className="grid min-w-[1120px] grid-cols-7 gap-3">
             {DAYS.map(day => {
               const slots = filtered[day] ?? []
               return (
-                <div key={day} className="flex flex-col rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+                <div key={day} className="flex min-h-[360px] flex-col overflow-hidden rounded-xl border border-border bg-card">
                   <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5">
                     <span className="text-sm font-semibold text-[var(--color-text)]">{DAY_LABELS[day]}</span>
                     <button
@@ -361,6 +373,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                 </div>
               )
             })}
+          </div>
           </div>
         </FadeIn>
       </div>
@@ -500,6 +513,26 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function PlanningMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string
+  value: number | string
+  helper: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background/70 p-3">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <p className="truncate text-xl font-bold leading-none text-foreground">{value}</p>
+        <p className="pb-0.5 text-right text-[11px] text-muted-foreground">{helper}</p>
+      </div>
     </div>
   )
 }
