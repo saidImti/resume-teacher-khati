@@ -448,7 +448,6 @@ function CategoryCard({
             <div className="divide-y divide-border/40">
               {items.map(item => {
                 const ytId    = getYoutubeId(item.link)
-                const lvlSlug = item.levels?.[0]
                 return (
                   <div key={item.id}
                     className={cn(
@@ -491,7 +490,7 @@ function CategoryCard({
                     <label className="space-y-1">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Niveau</span>
                       <select
-                        value={lvlSlug ?? activeLevelSlug}
+                        value={activeLevelSlug}
                         onChange={event => onChangeItemLevel(item.id, event.target.value)}
                         className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                       >
@@ -570,16 +569,14 @@ export function PadletViewer({
   board, groups, selectedGroupId, sessionDate, onGroupChange, onDateChange, onBack,
 }: PadletViewerProps) {
   const router = useRouter()
-  const initialSlug = groups.find(g => g.id === selectedGroupId)?.levelSlug || groups[0]?.levelSlug || 'kids'
+  const preschoolGroup = groups.find(group => group.levelSlug === 'preschoolers')
+  const initialSlug = preschoolGroup?.levelSlug || groups[0]?.levelSlug || 'preschoolers'
+  const didSetDefaultGroup = useRef(false)
 
   const [items,             setItems]             = useState<LessonItem[]>(() => {
-    // Auto-sélectionner les items du niveau du groupe par défaut
-    const expanded = expandItems(board.items)
-    const group    = groups.find(g => g.id === selectedGroupId)
-    const slug     = group?.levelSlug ?? ''
-    if (!slug) return expanded
-    return expanded.map(i => ({ ...i, selected: (i.levels?.[0] ?? 'all') === slug }))
+    return expandItems(board.items).map(item => ({ ...item, selected: false }))
   })
+  const [selectionByLevel, setSelectionByLevel] = useState<Record<string, string[]>>({})
   const [categoryOverrides, setCategoryOverrides] = useState<Record<string, LessonContentType>>({})
   const [manualItems,       setManualItems]       = useState<ManualItem[]>([])
   const [recatOpen,         setRecatOpen]         = useState<string | null>(null)
@@ -590,8 +587,17 @@ export function PadletViewer({
   const [generatedResumes, setGeneratedResumes] = useState<Record<string, { id: string; title: string }>>({})
   const [lastGeneratedByLevel, setLastGeneratedByLevel] = useState<Record<string, string>>({})
 
-  // Quand le groupe change, afficher son niveau sans modifier les choix déjà cochés.
   useEffect(() => {
+    if (didSetDefaultGroup.current || !preschoolGroup) return
+    didSetDefaultGroup.current = true
+    setActiveLevelSlug('preschoolers')
+    setSelectedLevelSlugs(['preschoolers'])
+    if (selectedGroupId !== preschoolGroup.id) onGroupChange(preschoolGroup.id)
+  }, [onGroupChange, preschoolGroup, selectedGroupId])
+
+  // Quand le groupe change ensuite, afficher son niveau sans modifier les choix.
+  useEffect(() => {
+    if (!didSetDefaultGroup.current) return
     const group = groups.find(g => g.id === selectedGroupId)
     const slug  = group?.levelSlug ?? ''
     if (!slug) return
@@ -633,8 +639,20 @@ export function PadletViewer({
     return categoryOverrides[item.id] ?? item.type
   }
 
-  function toggleItem(id: string) {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, selected: !i.selected } : i))
+  function isItemSelected(id: string, slug = activeLevelSlug) {
+    return selectionByLevel[slug]?.includes(id) ?? false
+  }
+
+  function toggleItem(id: string, slug = activeLevelSlug) {
+    setSelectionByLevel(prev => {
+      const current = prev[slug] ?? []
+      return {
+        ...prev,
+        [slug]: current.includes(id)
+          ? current.filter(itemId => itemId !== id)
+          : [...current, id],
+      }
+    })
     setManualItems(prev => prev.map(i => i.id === id ? { ...i, selected: !i.selected } : i))
   }
 
@@ -653,8 +671,20 @@ export function PadletViewer({
   }
 
   function changeItemLevel(id: string, level: string) {
-    setItems(prev => prev.map(item => item.id === id ? { ...item, levels: [level as LevelSlug] } : item))
-    setManualItems(prev => prev.map(item => item.id === id ? { ...item, level } : item))
+    if (manualItems.some(item => item.id === id)) {
+      setManualItems(prev => prev.map(item => item.id === id ? { ...item, level } : item))
+      return
+    }
+    setSelectionByLevel(prev => {
+      const source = (prev[activeLevelSlug] ?? []).filter(itemId => itemId !== id)
+      const target = prev[level] ?? []
+      return {
+        ...prev,
+        [activeLevelSlug]: source,
+        [level]: target.includes(id) ? target : [...target, id],
+      }
+    })
+    setSelectedLevelSlugs(prev => prev.includes(level) ? prev : [...prev, level])
   }
 
   function removeManualItem(id: string) {
@@ -662,9 +692,14 @@ export function PadletViewer({
   }
 
   function toggleCategory(type: LessonContentType, select: boolean) {
-    const ids  = new Set(items.filter(i => effType(i) === type && (i.levels?.[0] ?? 'all') === activeLevelSlug).map(i => i.id))
+    const ids = items.filter(item => effType(item) === type && isItemSelected(item.id)).map(item => item.id)
     const mIds = new Set(manualItems.filter(i => i.type === type && i.level === activeLevelSlug).map(i => i.id))
-    setItems(prev => prev.map(i => ids.has(i.id) ? { ...i, selected: select } : i))
+    if (!select) {
+      setSelectionByLevel(prev => ({
+        ...prev,
+        [activeLevelSlug]: (prev[activeLevelSlug] ?? []).filter(id => !ids.includes(id)),
+      }))
+    }
     setManualItems(prev => prev.map(i => mIds.has(i.id) ? { ...i, selected: select } : i))
   }
 
@@ -680,21 +715,23 @@ export function PadletViewer({
 
   const byCategory = useMemo(() => {
     const map = new Map<LessonContentType, LessonItem[]>()
-    for (const item of items.filter(item => item.selected && (item.levels?.[0] ?? 'all') === activeLevelSlug)) {
+    const selectedIds = new Set(selectionByLevel[activeLevelSlug] ?? [])
+    for (const item of items.filter(item => selectedIds.has(item.id))) {
       const t = categoryOverrides[item.id] ?? item.type
       if (!map.has(t)) map.set(t, [])
-      map.get(t)!.push(item)
+      map.get(t)!.push({ ...item, selected: true })
     }
     return CAT_ORDER.map(t => ({
       type:        t,
       items:       map.get(t) ?? [],
       manualItems: manualItems.filter(mi => mi.selected && mi.type === t && mi.level === activeLevelSlug),
     })).filter(category => category.items.length > 0 || category.manualItems.length > 0)
-  }, [items, manualItems, categoryOverrides, activeLevelSlug])
+  }, [items, manualItems, categoryOverrides, activeLevelSlug, selectionByLevel])
 
   const selectedCount = useMemo(
-    () => items.filter(i => i.selected).length + manualItems.filter(i => i.selected).length,
-    [items, manualItems]
+    () => (selectionByLevel[activeLevelSlug]?.length ?? 0) +
+      manualItems.filter(item => item.selected && item.level === activeLevelSlug).length,
+    [selectionByLevel, activeLevelSlug, manualItems]
   )
 
   // Overview stats for the right panel header bar
@@ -730,12 +767,15 @@ export function PadletViewer({
   }
 
   function selectedItemsForLevel(slug: string): LessonItem[] {
+    const selectedIds = new Set(selectionByLevel[slug] ?? [])
     const selectedPadlet = items
-      .filter(i => i.selected && (i.levels?.[0] ?? 'all') === slug)
+      .filter(item => selectedIds.has(item.id))
       .map(i => ({
         ...i,
         id: i.id.replace(/__[a-z]+$/, ''),
         type: effType(i),
+        selected: true,
+        levels: [slug as LevelSlug],
       }))
     const selectedManual: LessonItem[] = manualItems
       .filter(item => item.selected && item.level === slug)
@@ -880,8 +920,8 @@ export function PadletViewer({
         <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {availableLevelSlugs.map(slug => {
             const meta = LEVEL_META[slug]
-            const levelItems = items.filter(i => (i.levels?.[0] ?? 'all') === slug)
-            const levelSelected = levelItems.filter(i => i.selected).length
+            const levelSelected = selectedItemsForLevel(slug).length
+            const levelTotal = items.length + manualItems.filter(item => item.level === slug).length
             const isInBatch = selectedLevelSlugs.includes(slug)
             const isActive = activeLevelSlug === slug
             return (
@@ -909,7 +949,7 @@ export function PadletViewer({
                   <span className="text-lg">{meta?.emoji}</span>
                   <div className="flex items-center gap-1.5">
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-bold text-muted-foreground">
-                      {levelSelected}/{levelItems.length}
+                      {levelSelected}/{levelTotal}
                     </span>
                     <button
                       type="button"
@@ -1019,11 +1059,14 @@ export function PadletViewer({
           </p>
           <div className="flex gap-2 text-xs mt-0.5">
             <button type="button"
-              onClick={() => setItems(prev => prev.map(i => ({ ...i, selected: true })))}
+              onClick={() => setSelectionByLevel(prev => ({ ...prev, [activeLevelSlug]: items.map(item => item.id) }))}
               className="text-primary hover:underline">Tout cocher</button>
             <span className="text-muted-foreground">·</span>
             <button type="button"
-              onClick={() => setItems(prev => prev.map(i => ({ ...i, selected: false })))}
+              onClick={() => {
+                setSelectionByLevel(prev => ({ ...prev, [activeLevelSlug]: [] }))
+                setManualItems(prev => prev.map(item => item.level === activeLevelSlug ? { ...item, selected: false } : item))
+              }}
               className="text-muted-foreground hover:text-foreground hover:underline">Tout décocher</button>
           </div>
         </div>
@@ -1065,13 +1108,15 @@ export function PadletViewer({
             </div>
             {byLevel.map(({ slug, items: lvItems }) => {
               const lm      = LEVEL_META[slug] ?? { emoji: '📌', label: slug, color: 'border-gray-200 bg-gray-50', text: 'text-gray-900 dark:text-gray-200' }
-              const lvSel   = lvItems.filter(i => i.selected).length
+              const lvSel   = lvItems.filter(item => isItemSelected(item.id)).length
               const isActiveLevel = slug === activeLevelSlug
               return (
                 <div key={slug} className="mb-3">
                   <button
                     type="button"
-                    onClick={() => activateLevel(slug)}
+                    onClick={() => {
+                      if (groupForLevel(slug)) activateLevel(slug)
+                    }}
                     className={cn(
                       'mb-2 flex w-full items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-left transition-all',
                       lm.color,
@@ -1089,11 +1134,10 @@ export function PadletViewer({
                   </button>
                   {lvItems.map(item => (
                     <LeftPanelItem key={item.id}
-                      item={item}
+                      item={{ ...item, selected: isItemSelected(item.id) }}
                       effType={effType(item)}
                       recatOpen={recatOpen === item.id}
                       onToggle={() => {
-                        if (!isActiveLevel) activateLevel(slug)
                         toggleItem(item.id)
                       }}
                       onOpenRecat={() => setRecatOpen(item.id)}
@@ -1156,7 +1200,8 @@ export function PadletViewer({
         <div className="space-y-3">
           {byLevel.map(({ slug, items: lvItems }) => {
             const lm     = LEVEL_META[slug] ?? { emoji: '📌', label: slug, color: 'border-gray-200 bg-gray-50', text: 'text-gray-900 dark:text-gray-200' }
-            const lvSel  = lvItems.filter(i => i.selected).length
+            const targetSlug = groupForLevel(slug) ? slug : activeLevelSlug
+            const lvSel  = lvItems.filter(item => isItemSelected(item.id, targetSlug)).length
             const allSel = lvSel === lvItems.length
             return (
               <div key={slug} className={cn('rounded-2xl border-2 overflow-hidden', lm.color)}>
@@ -1167,7 +1212,14 @@ export function PadletViewer({
                   <button type="button"
                     onClick={() => {
                       const ids = new Set(lvItems.map(i => i.id))
-                      setItems(prev => prev.map(i => ids.has(i.id) ? { ...i, selected: !allSel } : i))
+                      setSelectionByLevel(prev => {
+                        const current = prev[targetSlug] ?? []
+                        const withoutSection = current.filter(id => !ids.has(id))
+                        return {
+                          ...prev,
+                          [targetSlug]: allSel ? withoutSection : [...withoutSection, ...ids],
+                        }
+                      })
                     }}
                     className={cn(
                       'rounded-lg px-2.5 py-1 text-xs font-bold border transition-all',
@@ -1181,18 +1233,18 @@ export function PadletViewer({
                 <div className="border-t border-current/10 bg-background/60 divide-y divide-border/40">
                   {lvItems.map(item => (
                     <div key={item.id}
-                      onClick={() => toggleItem(item.id)}
+                      onClick={() => toggleItem(item.id, targetSlug)}
                       className={cn(
                         'flex cursor-pointer items-center gap-3 px-4 py-2.5 hover:bg-muted/30 transition-all',
-                        item.selected && 'bg-primary/[0.04]'
+                        isItemSelected(item.id, targetSlug) && 'bg-primary/[0.04]'
                       )}>
                       <div className="shrink-0">
-                        {item.selected
+                        {isItemSelected(item.id, targetSlug)
                           ? <CheckSquare className="h-4 w-4 text-primary" />
                           : <Square className="h-4 w-4 text-muted-foreground/40" />}
                       </div>
                       <p className={cn('flex-1 min-w-0 text-sm font-medium truncate',
-                        item.selected ? 'text-foreground' : 'text-muted-foreground')}>
+                        isItemSelected(item.id, targetSlug) ? 'text-foreground' : 'text-muted-foreground')}>
                         {item.name}
                       </p>
                       <div className="relative" onClick={e => e.stopPropagation()}>
