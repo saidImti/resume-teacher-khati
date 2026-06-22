@@ -20,25 +20,11 @@ export default async function PresencesPage() {
 
   const admin = createAdminSupabaseClient()
 
-  // Sites de l'utilisateur (filtré par user_id — colonne présente sur sites)
-  const { data: sites } = await supabase
-    .from('sites')
-    .select('id, name, slug, color, is_active')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .order('name')
-
-  const siteIds = (sites ?? []).map((s) => s.id)
-
-  // Groupes filtrés par les sites de l'utilisateur via client admin (groups n'a pas user_id)
-  const { data: groups } = siteIds.length > 0
-    ? await admin
-        .from('groups')
-        .select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)')
-        .in('site_id', siteIds)
-        .eq('is_active', true)
-        .order('name')
-    : { data: [] }
+  // sites et groups n'ont pas de colonne user_id — app mono-utilisateur, client admin
+  const [{ data: sites }, { data: groups }] = await Promise.all([
+    admin.from('sites').select('id, name, slug, color, is_active').eq('is_active', true).order('name'),
+    admin.from('groups').select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)').eq('is_active', true).order('name'),
+  ])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
