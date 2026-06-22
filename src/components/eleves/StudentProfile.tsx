@@ -2,17 +2,27 @@
 
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useState } from 'react'
 import {
   ChevronLeft, Edit, Phone, Mail, MessageCircle, MapPin,
   Calendar, Shield, Users, AlertCircle, Wallet, BookOpen, Receipt,
+  Plus, Loader2, X,
 } from 'lucide-react'
 import type { Student, Enrollment, Payment, Invoice } from '@/types'
 
+interface GroupOption {
+  id: string
+  name: string
+  level: { name: string; emoji: string }
+  site:  { name: string }
+}
+
 interface Props {
-  student: Student
+  student:     Student
   enrollments: Enrollment[]
-  payments: Payment[]
-  invoices: Invoice[]
+  payments:    Payment[]
+  invoices:    Invoice[]
+  groups:      GroupOption[]
 }
 
 const STATUS_CONFIG = {
@@ -27,9 +37,38 @@ const PAYMENT_METHODS: Record<string, string> = {
 }
 
 
-export function StudentProfile({ student, enrollments, payments, invoices }: Props) {
+export function StudentProfile({ student, enrollments, payments, invoices, groups }: Props) {
   const router = useRouter()
   const st = STATUS_CONFIG[student.status] ?? STATUS_CONFIG.active
+
+  // ── Formulaire inscription groupe ────────────────────────────────────────────
+  const [showEnroll, setShowEnroll] = useState(false)
+  const [enrollGroupId, setEnrollGroupId] = useState('')
+  const [enrollDate, setEnrollDate] = useState(new Date().toISOString().slice(0, 10))
+  const [enrollStatus, setEnrollStatus] = useState<'active' | 'trial'>('active')
+  const [enrolling, setEnrolling] = useState(false)
+  const [enrollError, setEnrollError] = useState<string | null>(null)
+
+  async function submitEnrollment() {
+    if (!enrollGroupId) { setEnrollError('Sélectionne un groupe'); return }
+    setEnrolling(true); setEnrollError(null)
+    try {
+      const res = await fetch('/api/enrollments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: student.id, group_id: enrollGroupId, start_date: enrollDate, status: enrollStatus }),
+      })
+      const data = await res.json() as { error?: string }
+      if (!res.ok) { setEnrollError(data.error ?? 'Erreur'); return }
+      setShowEnroll(false)
+      setEnrollGroupId('')
+      router.refresh()
+    } catch {
+      setEnrollError('Erreur réseau')
+    } finally {
+      setEnrolling(false)
+    }
+  }
   const family = student.family
 
   // Calcul âge
@@ -126,7 +165,73 @@ export function StudentProfile({ student, enrollments, payments, invoices }: Pro
             )}
 
             {/* Inscriptions */}
-            <Section icon={<BookOpen className="h-4 w-4 text-violet-500" />} title="Historique des groupes">
+            <Section
+              icon={<BookOpen className="h-4 w-4 text-violet-500" />}
+              title="Groupes"
+              action={
+                <button
+                  onClick={() => setShowEnroll((v) => !v)}
+                  className="flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Inscrire dans un groupe
+                </button>
+              }
+            >
+              {/* Formulaire d'inscription */}
+              {showEnroll && (
+                <div className="mb-4 rounded-xl border border-violet-200 bg-violet-50/50 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-violet-900">Nouvelle inscription</p>
+                    <button onClick={() => setShowEnroll(false)} className="text-violet-400 hover:text-violet-600">
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <select
+                    value={enrollGroupId}
+                    onChange={(e) => setEnrollGroupId(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                  >
+                    <option value="">— Choisir un groupe —</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.level.emoji} {g.name} · {g.site.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Date début</label>
+                      <input
+                        type="date"
+                        value={enrollDate}
+                        onChange={(e) => setEnrollDate(e.target.value)}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-[var(--color-text-muted)] mb-1 block">Statut</label>
+                      <select
+                        value={enrollStatus}
+                        onChange={(e) => setEnrollStatus(e.target.value as 'active' | 'trial')}
+                        className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      >
+                        <option value="active">Actif</option>
+                        <option value="trial">Essai</option>
+                      </select>
+                    </div>
+                  </div>
+                  {enrollError && <p className="text-xs text-red-600">{enrollError}</p>}
+                  <button
+                    onClick={() => void submitEnrollment()}
+                    disabled={enrolling || !enrollGroupId}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                  >
+                    {enrolling ? <><Loader2 className="h-4 w-4 animate-spin" /> Inscription…</> : 'Confirmer l\'inscription'}
+                  </button>
+                </div>
+              )}
+
               {enrollments.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">Aucune inscription enregistrée.</p>
               ) : (
@@ -300,12 +405,15 @@ function FinancialMetric({
   )
 }
 
-function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+function Section({ icon, title, action, children }: { icon: React.ReactNode; title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
-      <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
-        {icon}{title}
-      </h3>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          {icon}{title}
+        </h3>
+        {action}
+      </div>
       {children}
     </div>
   )

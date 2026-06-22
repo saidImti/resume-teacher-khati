@@ -22,10 +22,11 @@ export default async function StudentPage({ params }: Props) {
     notFound()
   }
 
-  const [enrollments, payments, invoices] = await Promise.all([
+  const [enrollments, payments, invoices, { data: groups }] = await Promise.all([
     getEnrollmentsByStudent(admin, id),
     student.family_id ? getPaymentsByFamily(admin, student.family_id) : Promise.resolve([]),
     student.family_id ? getInvoices(admin, { familyId: student.family_id }) : Promise.resolve([]),
+    admin.from('groups').select('id, name, level:levels(name, emoji), site:sites(name)').eq('is_active', true).order('name'),
   ])
 
   return (
@@ -34,6 +35,7 @@ export default async function StudentPage({ params }: Props) {
       enrollments={enrollments}
       payments={payments}
       invoices={invoices}
+      groups={(groups ?? []) as unknown as { id: string; name: string; level: { name: string; emoji: string }; site: { name: string } }[]}
     />
   )
 }
