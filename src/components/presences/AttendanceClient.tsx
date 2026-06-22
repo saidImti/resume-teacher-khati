@@ -93,6 +93,8 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
   const [saved, setSaved]                     = useState(false)
   const [error, setError]                     = useState<string | null>(null)
   const [siteFilter, setSiteFilter]           = useState('')
+  const [isSendingCatchup, setIsSendingCatchup] = useState(false)
+  const [catchupResult, setCatchupResult]       = useState<{ sent: number; failed: number; simulated: boolean; testMode: boolean } | null>(null)
 
   // Groupes filtrés par site
   const filteredGroups = siteFilter
@@ -213,6 +215,32 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
       setError('Erreur réseau.')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Envoyer rattrapage WhatsApp aux parents absents
+  async function sendCatchup() {
+    if (!session) return
+    setIsSendingCatchup(true)
+    setCatchupResult(null)
+    try {
+      const res = await fetch('/api/whatsapp/catchup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: session.id }),
+      })
+      const data = await res.json() as { sent?: number; failed?: number; simulated?: boolean; testMode?: boolean; error?: string }
+      if (!res.ok) { setError(data.error ?? 'Erreur lors de l\'envoi'); return }
+      setCatchupResult({
+        sent:      data.sent      ?? 0,
+        failed:    data.failed    ?? 0,
+        simulated: data.simulated ?? true,
+        testMode:  data.testMode  ?? true,
+      })
+    } catch {
+      setError('Erreur réseau lors de l\'envoi WhatsApp.')
+    } finally {
+      setIsSendingCatchup(false)
     }
   }
 
@@ -381,8 +409,8 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
             </button>
           </div>
 
-          {/* ── Panel après sauvegarde ──────────────────────────────────── */}
-          {saved && stats.absent > 0 && (
+          {/* ── Panel après sauvegarde — absents ───────────────────────── */}
+          {saved && stats.absent > 0 && !catchupResult && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-5 w-5 text-amber-700" />
@@ -391,17 +419,50 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
                 </p>
               </div>
               <p className="text-sm text-amber-800">
-                Voulez-vous notifier les parents et envoyer un rattrapage automatique via WhatsApp ?
+                Notifier les parents et envoyer le rattrapage du cours via WhatsApp ?
               </p>
               <div className="flex flex-wrap gap-2">
-                <button className="flex items-center gap-2 rounded-xl bg-amber-700 text-white px-4 py-2 text-sm font-medium hover:bg-amber-800 transition-colors">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Notifier les parents absents
+                <button
+                  onClick={() => void sendCatchup()}
+                  disabled={isSendingCatchup}
+                  className="flex items-center gap-2 rounded-xl bg-amber-700 text-white px-4 py-2 text-sm font-medium hover:bg-amber-800 transition-colors disabled:opacity-60"
+                >
+                  {isSendingCatchup ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Envoi…</>
+                  ) : (
+                    <><MessageSquare className="h-3.5 w-3.5" /> Notifier les parents absents</>
+                  )}
                 </button>
-                <button className="flex items-center gap-2 rounded-xl border border-amber-300 bg-white text-amber-800 px-4 py-2 text-sm font-medium hover:bg-amber-50 transition-colors">
+                <button
+                  onClick={() => setCatchupResult({ sent: 0, failed: 0, simulated: false, testMode: false })}
+                  className="flex items-center gap-2 rounded-xl border border-amber-300 bg-white text-amber-800 px-4 py-2 text-sm font-medium hover:bg-amber-50 transition-colors"
+                >
                   Ignorer
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* ── Résultat envoi WhatsApp ─────────────────────────────────── */}
+          {saved && catchupResult && catchupResult.sent > 0 && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <Check className="h-5 w-5 text-emerald-600" />
+                <p className="text-sm font-semibold text-emerald-900">
+                  {catchupResult.sent} notification{catchupResult.sent > 1 ? 's' : ''} envoyée{catchupResult.sent > 1 ? 's' : ''}
+                  {catchupResult.simulated ? ' (simulation)' : ''}
+                </p>
+              </div>
+              {catchupResult.testMode && (
+                <p className="text-xs text-emerald-700">
+                  Mode test actif — les messages ont été envoyés à ton numéro de test, pas aux parents.
+                </p>
+              )}
+              {catchupResult.failed > 0 && (
+                <p className="text-xs text-amber-700">
+                  {catchupResult.failed} parent{catchupResult.failed > 1 ? 's' : ''} sans numéro WhatsApp configuré.
+                </p>
+              )}
             </div>
           )}
 
