@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import {
-  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2,
+  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2, Printer,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
@@ -527,6 +527,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                         <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Montant</th>
                         <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Payé</th>
                         <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Statut</th>
+                        <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">PDF</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border)]">
@@ -574,6 +575,17 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${(st ?? STATUS_CONFIG.pending)!.bg} ${(st ?? STATUS_CONFIG.pending)!.color}`}>
                                 {(st ?? STATUS_CONFIG.pending)!.label}
                               </span>
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              <a
+                                href={`/finances/invoice/${inv.id}/print`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Imprimer / Enregistrer en PDF"
+                                className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-[var(--color-text-muted)] hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </a>
                             </td>
                           </tr>
                         )
