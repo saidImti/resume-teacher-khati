@@ -6,7 +6,7 @@ import type { Group, Site } from '@/types'
 
 // ─── Types locaux ─────────────────────────────────────────────────────────────
 
-interface GroupWithRelations extends Group {
+interface GroupWithRelations extends Omit<Group, 'site' | 'level'> {
   level: { id: string; name: string; emoji: string; color: string }
   site:  { id: string; name: string }
 }
@@ -43,9 +43,4 @@ export default async function PresencesPage() {
       <div className="flex-1 overflow-y-auto p-6">
         <AttendanceClient
           groups={(groups ?? []) as unknown as GroupWithRelations[]}
-          sites={(sites ?? []) as unknown as Site[]}
-        />
-      </div>
-    </div>
-  )
-}
+          sites={(sites ?? []) as unknown as Site
