@@ -1,7 +1,7 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-06-22** (v3.3 — Session 12 : Pinterest OAuth + TypeScript 0 erreurs + génération factures)
+> Dernière mise à jour : **2026-06-22** (v3.4 — Session 12 suite : impression/PDF factures A4 via CSS @media print)
 
 ---
 
@@ -526,7 +526,7 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 ### Fonctionnalités école à venir
 - [ ] Notifications en temps réel (Supabase Realtime)
 - [x] Génération automatique des factures mensuelles ✅ (POST /api/invoices/generate-monthly)
-- [ ] Export PDF des factures (réact-pdf ou puppeteer)
+- [x] Export PDF des factures ✅ (page /finances/invoice/[id]/print — A4, CSS @media print, bouton imprimante dans le tableau)
 - [ ] Rappels de paiement WhatsApp automatiques (feature flag `payment_reminders`)
 - [ ] Fiche de paie mensuelle par famille (récapitulatif WhatsApp)
 - [ ] Suivi des présences / absences par séance
