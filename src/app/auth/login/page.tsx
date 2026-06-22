@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
+import Link from 'next/link'
 import { LoginForm } from './LoginForm'
 
 export const metadata: Metadata = { title: 'Connexion' }
@@ -42,9 +43,12 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-white/50 text-sm">
-          © {new Date().getFullYear()} Teacher Khati — Tous droits réservés
-        </p>
+        <div className="flex items-center justify-between text-white/50 text-sm">
+          <p>© {new Date().getFullYear()} Teacher Khati</p>
+          <Link href="/confidentialite" className="hover:text-white/80 underline transition-colors">
+            Confidentialité
+          </Link>
+        </div>
       </div>
 
       {/* Panneau droit — Formulaire */}
@@ -68,6 +72,13 @@ export default function LoginPage() {
           <Suspense fallback={<div className="h-48 rounded-xl border border-border bg-card" />}>
             <LoginForm />
           </Suspense>
+
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            En vous connectant, vous acceptez notre{' '}
+            <Link href="/confidentialite" className="underline hover:text-foreground transition-colors">
+              politique de confidentialité
+            </Link>
+          </p>
         </div>
       </div>
     </div>

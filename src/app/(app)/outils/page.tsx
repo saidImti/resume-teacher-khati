@@ -1,69 +1,10 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
-import { CheckCircle2, AlertCircle, Lock } from 'lucide-react'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { UserToolsManager, type UserTool } from '@/components/outils/UserToolsManager'
 
-interface ToolCard {
-  href: string
-  label: string
-  description: string
-  icon: React.ReactNode
-  statusLabel: string
-  statusOk: boolean | null
-  locked?: boolean
-  lockedReason?: string
-}
-
-function Card({ tool }: { tool: ToolCard }) {
-  const content = (
-    <div className={`group relative flex flex-col gap-4 rounded-2xl border p-5 transition-all h-full
-      ${tool.locked
-        ? 'border-border bg-muted/30 opacity-60 cursor-not-allowed'
-        : 'border-border bg-card hover:border-primary/40 hover:shadow-sm cursor-pointer'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted shrink-0">
-          {tool.icon}
-        </div>
-        {tool.locked ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            <Lock className="h-3 w-3" /> Bientôt
-          </span>
-        ) : tool.statusOk === true ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
-            <CheckCircle2 className="h-3 w-3" /> {tool.statusLabel}
-          </span>
-        ) : tool.statusOk === false ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
-            <AlertCircle className="h-3 w-3" /> {tool.statusLabel}
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            {tool.statusLabel}
-          </span>
-        )}
-      </div>
-      <div>
-        <h3 className="font-semibold text-foreground">{tool.label}</h3>
-        <p className="mt-1 text-sm text-muted-foreground leading-relaxed">{tool.description}</p>
-        {tool.locked && tool.lockedReason && (
-          <p className="mt-2 text-xs text-muted-foreground/70 italic">{tool.lockedReason}</p>
-        )}
-      </div>
-      {!tool.locked && (
-        <div className="mt-auto pt-2">
-          <span className="text-xs font-semibold text-primary group-hover:underline">
-            Configurer →
-          </span>
-        </div>
-      )}
-    </div>
-  )
-
-  if (tool.locked) return content
-  return <Link href={tool.href} className="h-full block">{content}</Link>
-}
+// ── Outils natifs (hardcodés) ──────────────────────────────────────────────────
 
 function WhatsAppIcon() {
   return (
@@ -81,102 +22,115 @@ function PinterestIcon() {
   )
 }
 
+interface NativeToolProps {
+  href: string
+  icon: React.ReactNode
+  label: string
+  description: string
+  statusLabel: string
+  statusOk: boolean | null
+}
+
+function NativeToolCard({ href, icon, label, description, statusLabel, statusOk }: NativeToolProps) {
+  return (
+    <Link href={href} className="group flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-sm transition-all">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted shrink-0">
+          {icon}
+        </div>
+        {statusOk === true ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700">
+            <CheckCircle2 className="h-3 w-3" /> {statusLabel}
+          </span>
+        ) : statusOk === false ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+            <AlertCircle className="h-3 w-3" /> {statusLabel}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            {statusLabel}
+          </span>
+        )}
+      </div>
+      <div>
+        <h3 className="font-semibold text-foreground text-sm">{label}</h3>
+        <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{description}</p>
+      </div>
+      <span className="text-xs font-semibold text-primary group-hover:underline mt-auto pt-1">
+        Configurer →
+      </span>
+    </Link>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default async function OutilsPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [{ data: waSettings }, { data: pinSettings }] = await Promise.all([
+  const admin = createAdminSupabaseClient()
+
+  const [{ data: waSettings }, { data: pinSettings }, { data: userTools }] = await Promise.all([
     supabase.from('whatsapp_settings').select('test_mode, production_number').eq('user_id', user.id).maybeSingle(),
     supabase.from('pinterest_settings').select('access_token, pinterest_username').eq('user_id', user.id).maybeSingle(),
+    admin.from('user_tools').select('*').eq('user_id', user.id).order('sort_order').order('created_at'),
   ])
 
-  const waConnected   = !!(waSettings?.production_number)
-  const pinConnected  = !!(pinSettings?.access_token)
-
-  const tools: ToolCard[] = [
-    {
-      href:        '/outils/whatsapp',
-      label:       'WhatsApp',
-      description: 'Envoyez les résumés de cours et les relances de paiement directement sur WhatsApp aux parents.',
-      icon:        <WhatsAppIcon />,
-      statusLabel: waSettings?.test_mode ? 'Mode test' : waConnected ? 'Connecté' : 'À configurer',
-      statusOk:    waConnected && !waSettings?.test_mode ? true : null,
-    },
-    {
-      href:        '/outils/pinterest',
-      label:       'Pinterest',
-      description: 'Publiez vos épingles pédagogiques directement depuis l\'application vers votre compte Pinterest.',
-      icon:        <PinterestIcon />,
-      statusLabel: pinConnected ? `@${pinSettings?.pinterest_username ?? 'connecté'}` : 'Non connecté',
-      statusOk:    pinConnected ? true : false,
-    },
-    {
-      href:        '#',
-      label:       'SMS / Voix',
-      description: 'Envoyez des rappels par SMS aux familles qui n\'utilisent pas WhatsApp.',
-      icon:        <span className="text-2xl">📱</span>,
-      statusLabel: 'Bientôt',
-      statusOk:    null,
-      locked:      true,
-      lockedReason: 'Intégration Twilio / OVH SMS prévue.',
-    },
-    {
-      href:        '#',
-      label:       'Email automatique',
-      description: 'Envoyez les factures et résumés par email à la demande ou automatiquement.',
-      icon:        <span className="text-2xl">📧</span>,
-      statusLabel: 'Bientôt',
-      statusOk:    null,
-      locked:      true,
-      lockedReason: 'Intégration Resend / Sendgrid prévue.',
-    },
-    {
-      href:        '#',
-      label:       'Google Calendar',
-      description: 'Synchronisez les séances et les jours fériés avec Google Calendar.',
-      icon:        <span className="text-2xl">📅</span>,
-      statusLabel: 'Bientôt',
-      statusOk:    null,
-      locked:      true,
-    },
-    {
-      href:        '#',
-      label:       'Stripe / Paiement en ligne',
-      description: 'Proposez aux familles de régler leurs factures directement en ligne.',
-      icon:        <span className="text-2xl">💳</span>,
-      statusLabel: 'Bientôt',
-      statusOk:    null,
-      locked:      true,
-    },
-  ]
-
-  const activeCount = tools.filter((t) => !t.locked && t.statusOk === true).length
+  const waConnected  = !!(waSettings?.production_number)
+  const pinConnected = !!(pinSettings?.access_token)
+  const customTools  = (userTools ?? []) as UserTool[]
+  const activeCustom = customTools.filter((t) => t.is_active).length
 
   return (
-    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-6">
+    <main className="p-4 lg:p-6 max-w-5xl mx-auto space-y-8">
 
-      {/* KPI rapide */}
-      <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-xl shrink-0">
-          🔧
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-foreground">
-            {activeCount} outil{activeCount !== 1 ? 's' : ''} actif{activeCount !== 1 ? 's' : ''}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {tools.filter((t) => !t.locked).length} disponibles · {tools.filter((t) => t.locked).length} en préparation
-          </p>
-        </div>
-      </div>
-
-      {/* Grille outils */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {tools.map((tool) => (
-          <Card key={tool.href + tool.label} tool={tool} />
+      {/* KPI */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Intégrations natives',    value: 2,            sub: 'WhatsApp · Pinterest' },
+          { label: 'Mes intégrations',        value: customTools.length, sub: `${activeCustom} active${activeCustom !== 1 ? 's' : ''}` },
+          { label: 'Total actif',             value: (waConnected ? 1 : 0) + (pinConnected ? 1 : 0) + activeCustom, sub: 'outils opérationnels' },
+          { label: 'Webhooks configurés',     value: customTools.filter((t) => t.webhook_url).length, sub: 'n8n · Make · Zapier…' },
+        ].map((k) => (
+          <div key={k.label} className="rounded-xl border border-border bg-card px-4 py-3">
+            <p className="text-xs text-muted-foreground">{k.label}</p>
+            <p className="text-xl font-bold text-foreground mt-0.5">{k.value}</p>
+            <p className="text-xs text-muted-foreground">{k.sub}</p>
+          </div>
         ))}
       </div>
+
+      {/* Natifs */}
+      <section>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Intégrations natives
+        </h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <NativeToolCard
+            href="/outils/whatsapp"
+            icon={<WhatsAppIcon />}
+            label="WhatsApp"
+            description="Envoi de résumés de cours et relances de paiement aux parents."
+            statusLabel={waSettings?.test_mode ? 'Mode test' : waConnected ? 'Connecté' : 'À configurer'}
+            statusOk={waConnected && !waSettings?.test_mode ? true : null}
+          />
+          <NativeToolCard
+            href="/outils/pinterest"
+            icon={<PinterestIcon />}
+            label="Pinterest"
+            description="Publication d'épingles pédagogiques depuis l'application."
+            statusLabel={pinConnected ? `@${pinSettings?.pinterest_username ?? 'connecté'}` : 'Non connecté'}
+            statusOk={pinConnected ? true : false}
+          />
+        </div>
+      </section>
+
+      {/* Outils personnalisés (dynamiques) */}
+      <section>
+        <UserToolsManager initialTools={customTools} />
+      </section>
     </main>
   )
 }
