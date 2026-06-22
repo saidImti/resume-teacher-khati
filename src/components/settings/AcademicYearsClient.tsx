@@ -27,7 +27,7 @@ const COLOR_PALETTE = [
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export function AcademicYearsClient() {
-  const { years: ctxYears, refreshYears, setCurrentYear } = useAcademicYear()
+  const { refreshYears, setCurrentYear } = useAcademicYear()
   const [years, setYears]           = useState<YearWithStats[]>([])
   const [isLoading, setIsLoading]   = useState(true)
   const [showWizard, setShowWizard] = useState(false)
@@ -548,8 +548,8 @@ function YearEditModal({
   const [saving, setSaving] = useState(false)
   const [form, setForm]     = useState({
     name:       year.name,
-    start_date: year.start_date.split('T')[0],
-    end_date:   year.end_date.split('T')[0],
+    start_date: year.start_date.split('T')[0] ?? year.start_date,
+    end_date:   year.end_date.split('T')[0]   ?? year.end_date,
     color:      year.color,
     notes:      year.notes ?? '',
   })

@@ -7,8 +7,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Loader2, Check, AlertCircle, MessageSquare, ShieldCheck,
-  Users, Eye, EyeOff, Smartphone, Zap, TestTube2, Info,
-  ClipboardCheck, FileText, TrendingUp, Star, Passport,
+  Users, Eye, Smartphone, Zap, TestTube2, Info,
+  ClipboardCheck, FileText, TrendingUp, Star, BookMarked,
   Timer, Rss, Brain, Mic, QrCode, Globe, CreditCard, BarChart3,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -42,7 +42,7 @@ interface WhatsAppSettings {
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   ClipboardCheck, FileText, MessageSquare, TrendingUp, Star,
   ShieldCheck, Timer, Rss, Brain, Mic, QrCode, Globe, CreditCard, BarChart3,
-  Passport: Globe,
+  Passport: BookMarked,
 }
 
 function FeatureIcon({ icon, className }: { icon: string; className?: string }) {

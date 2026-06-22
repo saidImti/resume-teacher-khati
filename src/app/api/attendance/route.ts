@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     }
 
     for (const s of students) {
-      const a = attendanceMap.get((s as { id: string }).id)
+      const a = attendanceMap.get((s as unknown as { id: string }).id)
       if (!a)             { stats.unmarked++ }
       else if (a.status === 'present')  { stats.present++ }
       else if (a.status === 'absent')   { stats.absent++ }

@@ -18,6 +18,7 @@ interface StudentRecord {
   first_name: string
   last_name: string
   photo_url: string | null
+  photo_consent?: boolean | null
   family?: {
     id: string
     parent1_first: string

@@ -7,6 +7,7 @@ import {
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
+import { GenerateInvoicesButton } from './GenerateInvoicesButton'
 
 interface RevenueRow {
   period_month: number
@@ -481,6 +482,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
           <div className="space-y-5">
             <FadeIn>
               <div className="flex flex-wrap items-center gap-3">
+                <GenerateInvoicesButton />
                 <select
                   value={filterStatus}
                   onChange={e => setFilterStatus(e.target.value as InvoiceStatus | 'all')}
