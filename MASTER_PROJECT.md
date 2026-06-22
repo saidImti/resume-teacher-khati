@@ -1,7 +1,7 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-06-23** (v3.6 — Session 13 : migrations 012–014 ✅, bugfixes, section Outils, outils dynamiques, politique de confidentialité)
+> Dernière mise à jour : **2026-06-23** (v3.7 — Session 14 : fix presences complet, inscription élèves dans groupes, routes attendance corrigées)
 
 ---
 
@@ -539,7 +539,7 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 - [x] Génération automatique des factures mensuelles ✅ (`POST /api/invoices/generate-monthly`)
 - [x] Export PDF des factures ✅ (page `/finances/invoice/[id]/print`, A4, `@media print`, `window.print()`)
 - [x] Rappels de paiement WhatsApp ✅ (bouton par facture + relance groupée, `reminder_sent_at` migration 013)
-- [x] Suivi des présences ✅ (`/presences`, table attendance, migration 010)
+- [x] Suivi des présences ✅ (`/presences`, table attendance, migration 010, inscription élèves dans groupes)
 - [ ] Fiche de paie mensuelle par famille (récapitulatif WhatsApp)
 - [ ] Portail parents (feature flag `parent_portal` prêt, UI à créer)
 
@@ -569,6 +569,7 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 | 11 | 2026-06-22 | Présences (010), Années scolaires + Feature flags + WhatsApp (011), déploiement prod ✅ |
 | 12 | 2026-06-22 | Pinterest OAuth (012), impression PDF factures, rappels paiement WhatsApp (013), fix 4 bugs |
 | 13 | 2026-06-23 | Section Outils, outils dynamiques user_tools (014), politique confidentialité, migrations 012-014 ✅ |
+| 14 | 2026-06-23 | Fix presences (sites+groups+sessions sans user_id), inscription élèves dans groupes, routes attendance |
 
 ---
 
@@ -862,3 +863,47 @@ NEXT_PUBLIC_APP_URL     # URL de l'app (pour le redirect URI)
 Pinterest exige la soumission du formulaire Developer dans leur portail pour valider l'app.
 Sans validation, seul le compte Dev peut se connecter (mode test).
 URL : https://developers.pinterest.com → My Apps → [votre app] → Review
+
+---
+
+## 27. NOTES TECHNIQUES — SESSION 14
+
+### Tables sans colonne `user_id` (architecture critique)
+
+Ces tables n'ont **pas** de colonne `user_id` — ne jamais filtrer `.eq('user_id', ...)` dessus :
+
+| Table | Accès correct |
+|-------|--------------|
+| `sites` | Admin client (app mono-utilisateur) |
+| `groups` | Admin client + filtre `site_id` ou direct |
+| `sessions` | Admin client (lié à groups) |
+| `enrollments` | Admin client pour lecture ; `user_id` présent pour écriture |
+| `levels` | Admin client (référentiel global) |
+| `schedules` | Admin client |
+
+Tables **avec** `user_id` : `attendance`, `invoices`, `payments`, `families`, `students`, `whatsapp_settings`, `feature_flags`, `academic_years`, `user_tools`, `pinterest_settings`
+
+### Clé Supabase — migration vers format `sb_secret_`
+- Ancienne clé : format JWT `eyJ...` (service_role) → révoquée (exposée dans historique git)
+- Nouvelle clé : format `sb_secret_...` (Secret Key Supabase nouvelle génération)
+- Compatible avec `createClient()` — bypass RLS identique à l'ancienne
+- Valider dans `env.ts` : `key.startsWith('sb_secret_')` accepté ✅
+
+### Fix présences — Session 14
+Chaîne de corrections nécessaires pour que `/presences` fonctionne de bout en bout :
+
+1. **Page `/presences`** — sites et groups chargés via admin client (pas de user_id sur ces tables)
+2. **`/api/attendance/sessions` GET+POST** — suppression `.eq('user_id', ...)` sur sessions, admin client
+3. **`/api/attendance` GET** — admin client pour sessions et enrollments ; user client conservé pour attendance
+4. **Enrollments vides** — 3 élèves existaient mais aucun n'était inscrit dans un groupe (0 enrollments en DB)
+5. **`POST /api/enrollments`** — nouvelle route créée
+6. **`StudentProfile`** — bouton "Inscrire dans un groupe" + formulaire inline (groupe, date, statut actif/essai)
+
+### Flux complet présences (après session 14)
+```
+/eleves → profil élève → "Inscrire dans un groupe" → sélectionner groupe + date
+→ POST /api/enrollments (enrollment créé)
+→ /presences → sélectionner groupe → POST /api/attendance/sessions (session créée)
+→ GET /api/attendance?sessionId → élèves chargés depuis enrollments
+→ Marquer présences → POST /api/attendance (upsert)
+```
