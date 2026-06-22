@@ -1,7 +1,7 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-06-22** (v3.5 — Session 12 fin : impression PDF factures + rappels WhatsApp paiement + push prod)
+> Dernière mise à jour : **2026-06-23** (v3.6 — Session 13 : migrations 012–014 ✅, bugfixes, section Outils, outils dynamiques, politique de confidentialité)
 
 ---
 
@@ -43,7 +43,7 @@ PADLET_API_TOKEN                 ✅ Production
 
 ### Statut déploiement
 ✅ Code poussé sur GitHub (main) — branche protégée, PR merge  
-✅ Migrations 009, 010, 011 appliquées dans Supabase  
+✅ Migrations 001–014 toutes appliquées dans Supabase  
 ✅ Application déployée sur Vercel  
 - [ ] Régénérer `SUPABASE_SERVICE_ROLE_KEY` dans Supabase → Settings → API → Reset (ancienne clé exposée dans historique git)
 
@@ -117,8 +117,13 @@ Teacher Khati
 | `007_saved_fiches.sql` | Sauvegarde fiches & bilans | ✅ Appliquée |
 | `008_api_keys.sql` | Clés API externes (n8n, Make, Zapier) | ✅ Appliquée |
 | `009_school_management.sql` | **families, students, enrollments, schedules, pricing_rules, invoices, payments** | ✅ Appliquée |
+| `010_attendance.sql` | Table attendance, RLS, index unique (session_id, student_id) | ✅ Appliquée |
+| `011_academic_years_flags.sql` | academic_years, feature_flags, whatsapp_settings, seed 14 features | ✅ Appliquée |
+| `012_pinterest_integration.sql` | Table pinterest_settings, RLS | ✅ Appliquée |
+| `013_invoice_reminder_tracking.sql` | Colonne `invoices.reminder_sent_at` | ✅ Appliquée |
+| `014_user_tools.sql` | Table user_tools (outils dynamiques : n8n, Make, Airtable…) | ✅ Appliquée |
 
-> ✅ Migration 009 appliquée. Les pages Élèves / Planning / Finances sont opérationnelles.
+> ✅ Toutes les migrations 001–014 appliquées. Toutes les fonctionnalités sont opérationnelles.
 
 ### Schéma migration 009 (résumé)
 ```
@@ -326,12 +331,18 @@ PÉDAGOGIE
 └── 🎯  Activités         /activites
 
 ÉCOLE
+├── 📋  Présences         /presences
 ├── 👥  Élèves            /eleves
 ├── 📅  Planning          /planning
 └── 💰  Finances          /finances
 
+OUTILS
+└── 🔧  Outils            /outils  (onglets : Vue d'ensemble · WhatsApp · Pinterest)
+
 SYSTÈME
-└── ⚙️  Paramètres        /settings
+├── ⚙️  Paramètres        /settings
+├── 📆  Années scolaires  /settings/annees
+└── 🚩  Fonctionnalités   /settings/fonctionnalites
 ```
 
 ---
@@ -505,14 +516,14 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 
 ## 16. PROCHAINES ÉTAPES (Roadmap)
 
-### Immédiat
+### Immédiat — Action requise
 - [ ] Régénérer `SUPABASE_SERVICE_ROLE_KEY` → Supabase → Settings → API → Reset → mettre à jour dans Vercel
 
-### Phase 5 — WhatsApp Business API
+### Phase 5 — WhatsApp Business API (production réelle)
 - [ ] Compte Meta for Developers → app Business
 - [ ] Numéro WhatsApp Business (vérification Meta ~quelques jours)
-- [ ] Variables : `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`
-- [ ] Webhook de confirmation de livraison
+- [ ] Variables Vercel : `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`
+- [ ] Activer `test_mode = false` dans Outils → WhatsApp après configuration
 
 ### Phase 3 — Drag & Drop
 - [ ] Réorganisation des groupes dans le dashboard (dnd-kit déjà installé)
@@ -525,11 +536,19 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 
 ### Fonctionnalités école à venir
 - [ ] Notifications en temps réel (Supabase Realtime)
-- [x] Génération automatique des factures mensuelles ✅ (POST /api/invoices/generate-monthly)
-- [x] Export PDF des factures ✅ (page /finances/invoice/[id]/print — A4, CSS @media print, bouton imprimante dans le tableau)
-- [x] Rappels de paiement WhatsApp ✅ (bouton par facture + relance groupée "Relancer les impayés", migration 013)
+- [x] Génération automatique des factures mensuelles ✅ (`POST /api/invoices/generate-monthly`)
+- [x] Export PDF des factures ✅ (page `/finances/invoice/[id]/print`, A4, `@media print`, `window.print()`)
+- [x] Rappels de paiement WhatsApp ✅ (bouton par facture + relance groupée, `reminder_sent_at` migration 013)
+- [x] Suivi des présences ✅ (`/presences`, table attendance, migration 010)
 - [ ] Fiche de paie mensuelle par famille (récapitulatif WhatsApp)
-- [ ] Suivi des présences / absences par séance
+- [ ] Portail parents (feature flag `parent_portal` prêt, UI à créer)
+
+### Outils (Intégrations)
+- [x] Section Outils dans la Sidebar ✅
+- [x] WhatsApp configuré depuis `/outils/whatsapp` ✅
+- [x] Pinterest OAuth depuis `/outils/pinterest` ✅
+- [x] Outils dynamiques (user_tools) — n8n, Make, Airtable, Zapier, Slack… ✅
+- [ ] Pinterest → formulaire Dev : soumettre l'application pour validation Meta
 
 ---
 
@@ -548,7 +567,8 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 | 9 | 2026-06 | Module Élèves, Planning, Finances, Sidebar École, Dashboard KPIs |
 | 10 | 2026-06-21 | Fix sécurité scripts, déploiement GitHub/Vercel, doc mise à jour |
 | 11 | 2026-06-22 | Présences (010), Années scolaires + Feature flags + WhatsApp (011), déploiement prod ✅ |
-| 12 | 2026-06-22 | Pinterest OAuth (012), TypeScript 0 erreurs, génération automatique factures mensuelles |
+| 12 | 2026-06-22 | Pinterest OAuth (012), impression PDF factures, rappels paiement WhatsApp (013), fix 4 bugs |
+| 13 | 2026-06-23 | Section Outils, outils dynamiques user_tools (014), politique confidentialité, migrations 012-014 ✅ |
 
 ---
 
@@ -685,15 +705,18 @@ Pédagogie
 └── Activités          /activites
 
 École
-├── Présences          /presences          ← Nouveau
+├── Présences          /presences
 ├── Élèves             /eleves
 ├── Planning           /planning
 └── Finances           /finances
 
+Outils                                          ← Nouveau (session 13)
+└── Outils             /outils  (onglets : Vue d'ensemble · WhatsApp · Pinterest)
+
 Système
 ├── Paramètres         /settings
-├── Années scolaires   /settings/annees         ← Nouveau
-└── Fonctionnalités    /settings/fonctionnalites ← Nouveau
+├── Années scolaires   /settings/annees
+└── Fonctionnalités    /settings/fonctionnalites
 ```
 
 ---
@@ -706,11 +729,14 @@ Système
 | 009 | `009_school_management.sql` | students, enrollments, sessions, financial tables | ✅ Appliqué |
 | 010 | `010_attendance.sql` | Table attendance + RLS + index | ✅ Appliqué |
 | 011 | `011_academic_years_flags.sql` | academic_years colonnes, groups colonne, feature_flags, whatsapp_settings, seeds | ✅ Appliqué |
+| 012 | `012_pinterest_integration.sql` | Table pinterest_settings + RLS | ✅ Appliqué |
+| 013 | `013_invoice_reminder_tracking.sql` | Colonne `invoices.reminder_sent_at TIMESTAMPTZ` | ✅ Appliqué |
+| 014 | `014_user_tools.sql` | Table user_tools (outils dynamiques) + RLS + trigger updated_at | ✅ Appliqué |
 
 ### Ordre d'application obligatoire
 ```sql
 -- Dans Supabase → Database → SQL Editor :
--- Exécuter 009 → 010 → 011 dans l'ordre (chacun dans un onglet séparé)
+-- Exécuter 001 → 014 dans l'ordre (chacun dans un onglet séparé)
 -- Toutes les migrations sont idempotentes (IF NOT EXISTS / ON CONFLICT DO NOTHING)
 ```
 
@@ -752,3 +778,87 @@ interface GroupWithRelations extends Omit<Group, 'site' | 'level'> {
 - Dernière PR mergée : `deploy/session-11`
 - Build Vercel : ✅ Success
 - Reste : régénérer `SUPABASE_SERVICE_ROLE_KEY` (ancienne exposée dans historique)
+
+---
+
+## 24. FONCTIONNALITÉS — SESSION 12 (impression + rappels paiement + bugfixes)
+
+### Impression PDF des factures
+- Route : `/finances/invoice/[id]/print` — page s'ouvre en `target="_blank"` (nouvel onglet)
+- Server component : auth check + admin client (bypass RLS) pour fetcher la facture avec relations (family, site, payments)
+- Client component `PrintInvoiceClient` : layout A4 (210mm×297mm), `@media print { .no-print { display: none } }`
+- Bouton "✕ Fermer l'onglet" → `window.close()` (pas `window.history.back()` — page sans historique de navigation)
+- Contenu : réf. facture, famille, période, tableau lignes, sous-total / remise / total dû / déjà réglé / reste à payer, historique paiements, notes
+
+### Relances de paiement WhatsApp
+- Route API : `POST /api/whatsapp/payment-reminder`
+- Body : `{ invoiceId: string }` OU `{ all: true, statuses?: string[] }`
+- Message en français (🔴 si overdue) avec montant, période, réf. facture
+- Mise à jour `reminder_sent_at` après envoi réussi (migration 013)
+- Intégration dans `FinancesContent` : bouton par ligne + bouton groupé "Relancer les impayés"
+
+### Bugfixes session 12
+1. **Print "Retour" cassé** : `window.history.back()` → `window.close()` (onglet ouvert sans historique)
+2. **Présences dropdown vide** : `.eq('user_id', user.id)` supprimé sur `groups` (table sans colonne user_id — RLS via `has_site_access()`)
+3. **`reminder_sent_at` inexistant** : migration 013 non appliquée → code try/catch temporaire (maintenant nettoyé)
+4. **WhatsApp settings introuvable** : créé `/outils/whatsapp` + redirections depuis `/settings/whatsapp` et `/settings/pinterest`
+
+---
+
+## 25. SECTION OUTILS (Session 13)
+
+### Architecture
+```
+/outils                     ← Hub + KPI grid + cartes natives + UserToolsManager
+/outils/whatsapp            ← WhatsAppSettingsClient (test_mode, numéros, env vars)
+/outils/pinterest           ← PinterestConnect (OAuth flow)
+```
+Redirections : `/settings/whatsapp` → `/outils/whatsapp`, `/settings/pinterest` → `/outils/pinterest`
+
+### Intégrations natives (hardcodées)
+- **WhatsApp** : toggle test_mode, test_number, production_number, bloc info variables Vercel, formulaire test d'envoi
+- **Pinterest** : bouton OAuth → `/api/auth/pinterest` → callback `/api/auth/pinterest/callback` → redirect `/outils/pinterest`
+
+### Outils dynamiques (table `user_tools`)
+Permet d'ajouter n'importe quelle intégration externe via formulaire :
+- Champs : nom, emoji, description, catégorie, URL externe, webhook_url, api_key (masqué), notes, is_active
+- Catégories : `automation` | `crm` | `communication` | `stockage` | `paiement` | `calendrier` | `autre`
+- Suggestions rapides : n8n ⚡, Make 🔄, Zapier ⚡, Airtable 📊, Notion 📝, Slack 💬, Discord 🎮, Google Drive 📁, Stripe 💳, Google Calendar 📅
+- API : `GET/POST /api/outils` + `PATCH/DELETE /api/outils/[id]` (ownership check)
+- UI : `UserToolsManager` (`'use client'`) — grille cards + modal création/édition
+
+### Politique de confidentialité
+- Route publique : `/confidentialite` (pas d'auth requise, hors app shell)
+- Contenu RGPD complet en français : données collectées, base légale, hébergement, durée conservation, services tiers, droits CNIL, cookies
+- Lien depuis page login (panneau branding + sous le formulaire)
+
+---
+
+## 26. PINTEREST OAUTH (Migration 012 — Session 12)
+
+### Table `pinterest_settings`
+- `user_id UUID REFERENCES auth.users(id)` — 1 ligne par utilisateur
+- `access_token`, `token_type`, `token_expires_at`
+- `pinterest_user_id`, `pinterest_username`, `pinterest_email`
+- `boards_count`, `pins_count`
+- RLS : `auth.uid() = user_id`
+
+### Flux OAuth
+1. `GET /api/auth/pinterest` → redirect `https://www.pinterest.com/oauth/?...`
+2. Pinterest callback → `GET /api/auth/pinterest/callback?code=...`
+3. Échange code → access_token via `https://api.pinterest.com/v5/oauth/token`
+4. Fetch profil utilisateur `/v5/user_account`
+5. Upsert dans `pinterest_settings`
+6. Redirect → `/outils/pinterest`
+
+### Variables d'environnement Pinterest
+```
+PINTEREST_APP_ID        # Client ID de l'app Pinterest for Developers
+PINTEREST_APP_SECRET    # Client Secret
+NEXT_PUBLIC_APP_URL     # URL de l'app (pour le redirect URI)
+```
+
+### ⚠️ Formulaire Dev Pinterest
+Pinterest exige la soumission du formulaire Developer dans leur portail pour valider l'app.
+Sans validation, seul le compte Dev peut se connecter (mode test).
+URL : https://developers.pinterest.com → My Apps → [votre app] → Review

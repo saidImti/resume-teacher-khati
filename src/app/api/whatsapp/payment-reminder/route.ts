@@ -146,13 +146,10 @@ export async function POST(req: NextRequest) {
     })
 
     if (sendResult.success) {
-      // reminder_sent_at column added in migration 013 — graceful fallback if not applied yet
-      try {
-        await admin
-          .from('invoices')
-          .update({ reminder_sent_at: new Date().toISOString() } as never)
-          .eq('id', inv.id)
-      } catch { /* migration 013 not yet applied — non-blocking */ }
+      await admin
+        .from('invoices')
+        .update({ reminder_sent_at: new Date().toISOString() })
+        .eq('id', inv.id)
     }
   }
 
