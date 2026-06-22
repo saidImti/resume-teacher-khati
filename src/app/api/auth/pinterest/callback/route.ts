@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
   // Clear state cookie
   const failRedirect = (msg: string) => {
-    const url = new URL('/settings/pinterest', APP_URL)
+    const url = new URL('/outils/pinterest', APP_URL)
     url.searchParams.set('error', msg)
     const res = NextResponse.redirect(url)
     res.cookies.delete('pinterest_oauth_state')
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         connected_at:          new Date().toISOString(),
       }, { onConflict: 'user_id' })
 
-    const res = NextResponse.redirect(new URL('/settings/pinterest', APP_URL))
+    const res = NextResponse.redirect(new URL('/outils/pinterest', APP_URL))
     res.cookies.delete('pinterest_oauth_state')
     return res
   } catch (err) {

@@ -7,6 +7,7 @@ import {
   Settings, ChevronRight, LogOut, Menu, Pin,
   GraduationCap, Sliders,
   Users, CalendarDays, Wallet, ClipboardCheck, UsersRound,
+  Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui'
@@ -28,6 +29,10 @@ const NAV_SCHOOL = [
   { href: '/finances',                  label: 'Finances',           icon: Wallet         },
 ]
 
+const NAV_OUTILS = [
+  { href: '/outils', label: 'Outils', icon: Wrench },
+]
+
 const NAV_BOTTOM = [
   { href: '/settings',                    label: 'Paramètres',       icon: Settings      },
   { href: '/settings/annees',             label: 'Années scolaires', icon: GraduationCap },
@@ -47,7 +52,8 @@ function NavItem({ item, pathname, sidebarOpen }: {
   const Icon = item.icon
   const isStudentParent = item.href === '/eleves'
   const isStudentSubmenu = item.href.startsWith('/eleves/')
-  const isActive = pathname === item.href || (!isStudentParent && pathname.startsWith(item.href + '/'))
+  const isHubPage = item.href === '/outils' || item.href === '/settings'
+  const isActive = pathname === item.href || (!isStudentParent && !isHubPage && pathname.startsWith(item.href + '/')) || (isHubPage && pathname.startsWith(item.href))
   return (
     <div className="relative group/nav">
       <Link
@@ -154,6 +160,13 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
           )}
           {!sidebarOpen && <div className="my-2 border-t border-border mx-2" />}
           {NAV_SCHOOL.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
+
+          {/* Outils */}
+          {sidebarOpen && (
+            <p className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Outils</p>
+          )}
+          {!sidebarOpen && <div className="my-2 border-t border-border mx-2" />}
+          {NAV_OUTILS.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
 
           {/* Système */}
           {sidebarOpen && (
