@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { cn } from '@/lib/utils'
 import { NotificationCenter } from './NotificationCenter'
+import { YearSelector } from './YearSelector'
 
 interface HeaderProps {
   title: string
@@ -60,6 +61,7 @@ export function Header({ title, subtitle, action }: HeaderProps) {
           </kbd>
         </button>
 
+        <YearSelector />
         <ThemeToggle />
         <NotificationCenter />
 

@@ -291,7 +291,7 @@ function ResumeCard({ resume }: { resume: ResumeListItem }) {
   const StatusIcon = statusCfg.icon
 
   return (
-    <a href={`/resumes/${resume.id}`}
+    <a href={`/archives/${resume.id}`}
       className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-4
         hover:border-primary/30 hover:shadow-sm hover:bg-muted/20 transition-all group">
 
