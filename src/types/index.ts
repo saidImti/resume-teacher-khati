@@ -471,6 +471,7 @@ export interface Invoice {
   due_date: string | null
   line_items: InvoiceLineItem[]
   notes: string | null
+  reminder_sent_at: string | null
   created_at: string
   updated_at: string
   family?: Family

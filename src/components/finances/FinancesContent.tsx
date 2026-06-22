@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import {
-  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2, Printer,
+  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2, Printer, MessageCircle, Loader2,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
@@ -75,6 +75,9 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const [savingPricing, setSavingPricing] = useState(false)
   const [savingFamilyRate, setSavingFamilyRate] = useState(false)
   const [clearingFamilyRateId, setClearingFamilyRateId] = useState<string | null>(null)
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
+  const [sendingReminderAll, setSendingReminderAll] = useState(false)
+  const [reminderResult, setReminderResult] = useState<{ sent: number; failed: number; simulated: boolean } | null>(null)
   const [pricingForm, setPricingForm] = useState<PricingForm>({
     site_id: sites[0]?.id ?? '',
     name: `Tarif ${sites[0]?.name ?? 'site'} ${currentYear}`,
@@ -268,6 +271,44 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
       custom_monthly_rate: family?.custom_monthly_rate?.toString() ?? '',
       custom_rate_note: family?.custom_rate_note ?? '',
     })
+  }
+
+  async function sendPaymentReminder(invoiceId: string) {
+    setSendingReminderId(invoiceId)
+    try {
+      const res = await fetch('/api/whatsapp/payment-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erreur envoi relance')
+      setReminderResult({ sent: data.sent ?? 0, failed: data.failed ?? 0, simulated: data.simulated ?? false })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur lors de l\'envoi de la relance')
+    } finally {
+      setSendingReminderId(null)
+    }
+  }
+
+  async function sendAllReminders() {
+    if (!confirm('Envoyer une relance WhatsApp à toutes les familles avec des factures impayées ou en retard ?')) return
+    setSendingReminderAll(true)
+    setReminderResult(null)
+    try {
+      const res = await fetch('/api/whatsapp/payment-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erreur envoi relances')
+      setReminderResult({ sent: data.sent ?? 0, failed: data.failed ?? 0, simulated: data.simulated ?? false })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Erreur lors de l\'envoi des relances')
+    } finally {
+      setSendingReminderAll(false)
+    }
   }
 
   async function clearFamilyRate(family: Family) {
@@ -483,6 +524,22 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
             <FadeIn>
               <div className="flex flex-wrap items-center gap-3">
                 <GenerateInvoicesButton />
+                <button
+                  type="button"
+                  onClick={sendAllReminders}
+                  disabled={sendingReminderAll || invoices.filter(i => ['pending','overdue','partial'].includes(i.status)).length === 0}
+                  className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-40"
+                >
+                  {sendingReminderAll
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : <MessageCircle className="h-4 w-4" />}
+                  Relancer les impayés
+                </button>
+                {reminderResult && (
+                  <span className={`text-xs font-medium px-2 py-1 rounded-lg ${reminderResult.simulated ? 'bg-blue-50 text-blue-700' : reminderResult.sent > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                    {reminderResult.simulated ? `Simulation: ${reminderResult.sent} envoyé(s)` : `${reminderResult.sent} relance(s) envoyée(s)${reminderResult.failed > 0 ? ` · ${reminderResult.failed} échec` : ''}`}
+                  </span>
+                )}
                 <select
                   value={filterStatus}
                   onChange={e => setFilterStatus(e.target.value as InvoiceStatus | 'all')}
@@ -527,6 +584,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                         <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Montant</th>
                         <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Payé</th>
                         <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Statut</th>
+                        <th className="px-5 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Relance</th>
                         <th className="px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">PDF</th>
                       </tr>
                     </thead>
@@ -575,6 +633,23 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                               <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${(st ?? STATUS_CONFIG.pending)!.bg} ${(st ?? STATUS_CONFIG.pending)!.color}`}>
                                 {(st ?? STATUS_CONFIG.pending)!.label}
                               </span>
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              {['pending', 'overdue', 'partial'].includes(inv.status) ? (
+                                <button
+                                  type="button"
+                                  onClick={() => sendPaymentReminder(inv.id)}
+                                  disabled={sendingReminderId === inv.id}
+                                  title="Envoyer une relance WhatsApp"
+                                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-orange-500 hover:text-orange-700 hover:bg-orange-50 transition-colors disabled:opacity-50"
+                                >
+                                  {sendingReminderId === inv.id
+                                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    : <MessageCircle className="w-4 h-4" />}
+                                </button>
+                              ) : (
+                                <span className="text-[var(--color-text-muted)] text-xs">—</span>
+                              )}
                             </td>
                             <td className="px-5 py-4 text-right">
                               <a
