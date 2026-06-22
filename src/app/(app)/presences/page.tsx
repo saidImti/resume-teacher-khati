@@ -18,7 +18,6 @@ export default async function PresencesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Groupes actifs avec niveau + site
   const { data: groups } = await supabase
     .from('groups')
     .select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)')
@@ -26,7 +25,6 @@ export default async function PresencesPage() {
     .eq('is_active', true)
     .order('name')
 
-  // Sites actifs
   const { data: sites } = await supabase
     .from('sites')
     .select('id, name, slug, color, is_active')
@@ -43,4 +41,9 @@ export default async function PresencesPage() {
       <div className="flex-1 overflow-y-auto p-6">
         <AttendanceClient
           groups={(groups ?? []) as unknown as GroupWithRelations[]}
-          sites={(sites ?? []) as unknown as Site
+          sites={(sites ?? []) as unknown as Site[]}
+        />
+      </div>
+    </div>
+  )
+}
