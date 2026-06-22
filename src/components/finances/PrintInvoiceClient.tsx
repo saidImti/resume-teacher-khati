@@ -92,10 +92,10 @@ export function PrintInvoiceClient({ invoice }: Props) {
       <div className="no-print fixed top-0 left-0 right-0 z-50 flex items-center justify-between bg-white border-b border-gray-200 px-6 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => window.history.back()}
+            onClick={() => window.close()}
             className="text-sm text-gray-600 hover:text-gray-900 flex items-center gap-1"
           >
-            ← Retour
+            ✕ Fermer l'onglet
           </button>
           <span className="text-gray-300">|</span>
           <span className="text-sm font-medium text-gray-700">

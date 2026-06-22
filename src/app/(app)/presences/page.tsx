@@ -21,7 +21,6 @@ export default async function PresencesPage() {
   const { data: groups } = await supabase
     .from('groups')
     .select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)')
-    .eq('user_id', user.id)
     .eq('is_active', true)
     .order('name')
 

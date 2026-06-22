@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     .from('invoices')
     .select(`
       id, family_id, period_month, period_year, invoice_number,
-      amount_due, amount_paid, status, reminder_sent_at,
+      amount_due, amount_paid, status,
       family:families(id, parent1_first, parent1_whatsapp, parent1_phone)
     `)
     .eq('user_id', user.id)
@@ -146,10 +146,13 @@ export async function POST(req: NextRequest) {
     })
 
     if (sendResult.success) {
-      await admin
-        .from('invoices')
-        .update({ reminder_sent_at: new Date().toISOString() })
-        .eq('id', inv.id)
+      // reminder_sent_at column added in migration 013 — graceful fallback if not applied yet
+      try {
+        await admin
+          .from('invoices')
+          .update({ reminder_sent_at: new Date().toISOString() } as never)
+          .eq('id', inv.id)
+      } catch { /* migration 013 not yet applied — non-blocking */ }
     }
   }
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, MapPin, Key, UserCircle2 } from 'lucide-react'
+import { Users, MapPin, Key, UserCircle2, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 function PinterestNavIcon({ className }: { className?: string }) {
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/settings/sites',     label: 'Sites',     icon: MapPin           },
   { href: '/settings/users',     label: 'Comptes',   icon: UserCircle2      },
   { href: '/settings/api-keys',  label: 'Clés API',  icon: Key              },
+  { href: '/settings/whatsapp',  label: 'WhatsApp',  icon: MessageCircle    },
   { href: '/settings/pinterest', label: 'Pinterest', icon: PinterestNavIcon },
 ]
 
