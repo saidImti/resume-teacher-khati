@@ -3,11 +3,9 @@
 // POST → créer une session à la volée si elle n'existe pas encore
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
-// Params : ?date=2026-06-22&groupId=xxx (optionnels)
-// Sans params : retourne les sessions des 7 derniers jours + aujourd'hui
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,11 +13,13 @@ export async function GET(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
+    const admin = createAdminSupabaseClient()
     const { searchParams } = new URL(req.url)
     const date    = searchParams.get('date')
     const groupId = searchParams.get('groupId')
 
-    let query = supabase
+    // sessions n'a pas de colonne user_id — admin client
+    let query = admin
       .from('sessions')
       .select(`
         id, session_date, title,
@@ -29,14 +29,12 @@ export async function GET(req: NextRequest) {
           site:sites(id, name)
         )
       `)
-      .eq('user_id', user.id)
       .order('session_date', { ascending: false })
       .limit(30)
 
     if (date)    query = query.eq('session_date', date)
     if (groupId) query = query.eq('group_id', groupId)
 
-    // Par défaut : 14 derniers jours
     if (!date && !groupId) {
       const since = new Date()
       since.setDate(since.getDate() - 14)
@@ -46,7 +44,6 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Pour chaque session, compte les présences enregistrées
     const sessionIds = (data ?? []).map((s) => s.id)
     const { data: attendanceCounts } = await supabase
       .from('attendance')
@@ -76,8 +73,6 @@ export async function GET(req: NextRequest) {
 }
 
 // ─── POST ────────────────────────────────────────────────────────────────────
-// Body : { groupId, date }
-// Trouve ou crée la session pour ce groupe+date, retourne son id
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,24 +85,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'groupId et date requis' }, { status: 400 })
     }
 
-    // Cherche une session existante
-    const { data: existing } = await supabase
+    const admin = createAdminSupabaseClient()
+
+    // sessions n'a pas de colonne user_id — admin client
+    const { data: existing } = await admin
       .from('sessions')
-      .select('id, session_date, title')
+      .select('id, session_date, title, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
       .eq('group_id', groupId)
       .eq('session_date', date)
-      .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
 
     if (existing) {
       return NextResponse.json({ session: existing, created: false })
     }
 
-    // Crée la session automatiquement
-    const { data: created, error } = await supabase
+    const { data: created, error } = await admin
       .from('sessions')
-      .insert({ group_id: groupId, session_date: date, user_id: user.id })
-      .select('id, session_date, title')
+      .insert({ group_id: groupId, session_date: date })
+      .select('id, session_date, title, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
