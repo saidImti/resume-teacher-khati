@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Archive, BookOpen,
   Settings, ChevronRight, LogOut, Menu, Pin,
-  Users, CalendarDays, Wallet, UsersRound
+  GraduationCap, Sliders,
+  Users, CalendarDays, Wallet, ClipboardCheck, UsersRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui'
@@ -20,14 +21,17 @@ const NAV_ITEMS = [
 ]
 
 const NAV_SCHOOL = [
-  { href: '/eleves',      label: 'Élèves',      icon: Users           },
-  { href: '/eleves/familles-paiements', label: 'Familles & paiements', icon: UsersRound },
-  { href: '/planning',    label: 'Planning',    icon: CalendarDays    },
-  { href: '/finances',    label: 'Finances',    icon: Wallet          },
+  { href: '/presences',                 label: 'Présences',          icon: ClipboardCheck },
+  { href: '/eleves',                    label: 'Élèves',             icon: Users          },
+  { href: '/eleves/familles-paiements', label: 'Familles & paiements', icon: UsersRound   },
+  { href: '/planning',                  label: 'Planning',           icon: CalendarDays   },
+  { href: '/finances',                  label: 'Finances',           icon: Wallet         },
 ]
 
 const NAV_BOTTOM = [
-  { href: '/settings',    label: 'Paramètres',  icon: Settings        },
+  { href: '/settings',                    label: 'Paramètres',       icon: Settings      },
+  { href: '/settings/annees',             label: 'Années scolaires', icon: GraduationCap },
+  { href: '/settings/fonctionnalites',    label: 'Fonctionnalités',  icon: Sliders       },
 ]
 
 interface SidebarProps {
@@ -106,13 +110,10 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          // Base — toujours fixed sur mobile, relative sur desktop
           'fixed inset-y-0 left-0 z-30 flex flex-col',
           'bg-background border-r border-border',
           'transition-all duration-300 ease-in-out',
-          // Largeur selon etat
           sidebarOpen ? 'w-64' : 'w-0 overflow-hidden lg:w-16',
-          // Desktop : dans le flux normal
           'lg:relative lg:z-auto'
         )}
         aria-label="Navigation principale"
@@ -154,7 +155,7 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
           {!sidebarOpen && <div className="my-2 border-t border-border mx-2" />}
           {NAV_SCHOOL.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
 
-          {/* Bottom */}
+          {/* Système */}
           {sidebarOpen && (
             <p className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Système</p>
           )}
