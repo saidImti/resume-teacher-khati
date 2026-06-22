@@ -1,7 +1,7 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-06-22** (v3.4 — Session 12 suite : impression/PDF factures A4 via CSS @media print)
+> Dernière mise à jour : **2026-06-22** (v3.5 — Session 12 fin : impression PDF factures + rappels WhatsApp paiement + push prod)
 
 ---
 
@@ -527,7 +527,7 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 - [ ] Notifications en temps réel (Supabase Realtime)
 - [x] Génération automatique des factures mensuelles ✅ (POST /api/invoices/generate-monthly)
 - [x] Export PDF des factures ✅ (page /finances/invoice/[id]/print — A4, CSS @media print, bouton imprimante dans le tableau)
-- [ ] Rappels de paiement WhatsApp automatiques (feature flag `payment_reminders`)
+- [x] Rappels de paiement WhatsApp ✅ (bouton par facture + relance groupée "Relancer les impayés", migration 013)
 - [ ] Fiche de paie mensuelle par famille (récapitulatif WhatsApp)
 - [ ] Suivi des présences / absences par séance
 
