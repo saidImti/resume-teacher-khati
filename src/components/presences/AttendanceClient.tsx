@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import {
   Users, CalendarDays, CheckCircle2, XCircle, Clock,
   AlertCircle, Send, RotateCcw, ChevronDown, Loader2,
-  MessageSquare, Check, Info,
+  MessageSquare, Check, Info, History, ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Site } from '@/types'
@@ -45,6 +45,20 @@ interface GroupOption {
   name: string
   level: { id: string; name: string; emoji: string; color: string }
   site:  { id: string; name: string }
+}
+
+interface RecentSession {
+  id: string
+  session_date: string
+  title: string | null
+  group: {
+    id: string
+    name: string
+    level: { id: string; name: string; emoji: string; color: string }
+    site:  { id: string; name: string }
+  } | null
+  attendanceDone: boolean
+  stats: { present: number; absent: number; total: number } | null
 }
 
 interface AttendanceClientProps {
@@ -95,6 +109,21 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
   const [siteFilter, setSiteFilter]           = useState('')
   const [isSendingCatchup, setIsSendingCatchup] = useState(false)
   const [catchupResult, setCatchupResult]       = useState<{ sent: number; failed: number; simulated: boolean; testMode: boolean } | null>(null)
+  const [recentSessions, setRecentSessions]     = useState<RecentSession[]>([])
+  const [historyOpen, setHistoryOpen]           = useState(true)
+
+  // Historique des appels récents (14 derniers jours) — pour retrouver un appel sauvegardé
+  const loadRecentSessions = useCallback(async () => {
+    try {
+      const res = await fetch('/api/attendance/sessions')
+      const data = await res.json() as { sessions?: RecentSession[] }
+      if (res.ok) setRecentSessions((data.sessions ?? []).filter((s) => s.attendanceDone))
+    } catch {
+      // panneau facultatif — silencieux
+    }
+  }, [])
+
+  useEffect(() => { void loadRecentSessions() }, [loadRecentSessions])
 
   // Groupes filtrés par site
   const filteredGroups = siteFilter
@@ -211,6 +240,7 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
       const data = await res.json() as { saved?: number; error?: string }
       if (!res.ok) { setError(data.error ?? 'Erreur lors de l\'enregistrement'); return }
       setSaved(true)
+      void loadRecentSessions()
     } catch {
       setError('Erreur réseau.')
     } finally {
@@ -321,6 +351,67 @@ export function AttendanceClient({ groups }: AttendanceClientProps) {
           </div>
         )}
       </section>
+
+      {/* ── Appels récents (retrouver un appel sauvegardé) ─────────────── */}
+      {recentSessions.length > 0 && (
+        <section className="rounded-2xl border border-border bg-card">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-3 p-4 text-left"
+            aria-expanded={historyOpen}
+          >
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
+                <History className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Appels enregistrés</h2>
+                <p className="text-xs text-muted-foreground">
+                  {recentSessions.length} appel{recentSessions.length > 1 ? 's' : ''} sur les 14 derniers jours — cliquer pour rouvrir
+                </p>
+              </div>
+            </div>
+            <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', historyOpen && 'rotate-180')} />
+          </button>
+
+          {historyOpen && (
+            <div className="grid gap-2 border-t border-border p-3 sm:grid-cols-2">
+              {recentSessions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    if (!s.group) return
+                    setSelectedGroupId(s.group.id)
+                    setSelectedDate(s.session_date)
+                    setSaved(false)
+                  }}
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm"
+                >
+                  <span className="text-lg">{s.group?.level.emoji ?? '📋'}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {s.group?.name ?? 'Groupe'} · {s.group?.site.name ?? ''}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(s.session_date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                      {s.stats && (
+                        <>
+                          {' · '}
+                          <span className="font-medium text-emerald-600">{s.stats.present} présent{s.stats.present > 1 ? 's' : ''}</span>
+                          {s.stats.absent > 0 && <span className="font-medium text-red-500"> · {s.stats.absent} absent{s.stats.absent > 1 ? 's' : ''}</span>}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── Zone d'appel ────────────────────────────────────────────────── */}
       {isLoadingSession && (

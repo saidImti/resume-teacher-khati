@@ -53,3 +53,6 @@ scripts/migration/*.dump.json
 scripts/migration/dumps/
 
 .vercel
+
+# Config locale Claude Code
+.claude/
