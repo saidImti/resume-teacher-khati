@@ -6,7 +6,8 @@ import { useState } from 'react'
 import {
   ChevronLeft, Edit, Phone, Mail, MessageCircle, MapPin,
   Calendar, Shield, Users, AlertCircle, Wallet, BookOpen, Receipt,
-  Plus, Loader2, X,
+  Plus, Loader2, X, Hash, ClipboardCheck, CheckCircle2, XCircle,
+  Clock, Info, ArrowRight,
 } from 'lucide-react'
 import type { Student, Enrollment, Payment, Invoice } from '@/types'
 import { formatRegistrationNumber } from '@/lib/utils'
@@ -18,12 +19,25 @@ interface GroupOption {
   site:  { name: string }
 }
 
+export interface AttendanceHistoryEntry {
+  id: string
+  status: string
+  notes: string | null
+  marked_at: string
+  session: {
+    id: string
+    session_date: string
+    group: { name: string; level: { name: string; emoji: string; color: string } | null } | null
+  } | null
+}
+
 interface Props {
   student:     Student
   enrollments: Enrollment[]
   payments:    Payment[]
   invoices:    Invoice[]
   groups:      GroupOption[]
+  attendance:  AttendanceHistoryEntry[]
 }
 
 const STATUS_CONFIG = {
@@ -38,7 +52,7 @@ const PAYMENT_METHODS: Record<string, string> = {
 }
 
 
-export function StudentProfile({ student, enrollments, payments, invoices, groups }: Props) {
+export function StudentProfile({ student, enrollments, payments, invoices, groups, attendance }: Props) {
   const router = useRouter()
   const st = STATUS_CONFIG[student.status] ?? STATUS_CONFIG.active
 
@@ -144,10 +158,11 @@ export function StudentProfile({ student, enrollments, payments, invoices, group
                 action={
                   family.registration_number ? (
                     <span
-                      className="rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-bold tracking-wide text-amber-800 ring-1 ring-amber-300"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300/70 bg-gradient-to-b from-amber-50 to-amber-100 px-3 py-1.5 text-sm font-bold tabular-nums tracking-wide text-amber-800 shadow-sm dark:border-amber-700/40 dark:from-amber-950/40 dark:to-amber-900/30 dark:text-amber-300"
                       title="Numéro d'inscription de la famille"
                     >
-                      N° {formatRegistrationNumber(family.registration_number)}
+                      <Hash className="h-3.5 w-3.5 opacity-70" />
+                      {formatRegistrationNumber(family.registration_number)}
                     </span>
                   ) : undefined
                 }
@@ -276,6 +291,9 @@ export function StudentProfile({ student, enrollments, payments, invoices, group
                 </div>
               )}
             </Section>
+
+            {/* Présences de l'année */}
+            <AttendanceHistorySection attendance={attendance} />
 
             {/* Paiements */}
             <Section icon={<Receipt className="h-4 w-4 text-violet-500" />} title={`Factures (${invoices.length})`}>
@@ -416,6 +434,118 @@ function FinancialMetric({
         {value.toFixed(2)} €
       </p>
     </div>
+  )
+}
+
+// ─── Présences de l'année ──────────────────────────────────────────
+const ATTENDANCE_CONFIG: Record<string, { label: string; icon: React.ElementType; text: string; bg: string; bar: string }> = {
+  present: { label: 'Présent', icon: CheckCircle2, text: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 ring-emerald-200 dark:bg-emerald-950/30 dark:ring-emerald-900', bar: '#10b981' },
+  late:    { label: 'Retard',  icon: Clock,        text: 'text-amber-700 dark:text-amber-300',     bg: 'bg-amber-50 ring-amber-200 dark:bg-amber-950/30 dark:ring-amber-900',         bar: '#f59e0b' },
+  excused: { label: 'Excusé',  icon: Info,         text: 'text-blue-700 dark:text-blue-300',       bg: 'bg-blue-50 ring-blue-200 dark:bg-blue-950/30 dark:ring-blue-900',             bar: '#3b82f6' },
+  absent:  { label: 'Absent',  icon: XCircle,      text: 'text-red-700 dark:text-red-300',         bg: 'bg-red-50 ring-red-200 dark:bg-red-950/30 dark:ring-red-900',                 bar: '#ef4444' },
+}
+
+function AttendanceHistorySection({ attendance }: { attendance: AttendanceHistoryEntry[] }) {
+  const counts = { present: 0, late: 0, excused: 0, absent: 0 }
+  for (const entry of attendance) {
+    if (entry.status in counts) counts[entry.status as keyof typeof counts]++
+  }
+  const total = attendance.length
+  const attended = counts.present + counts.late
+  const rate = total > 0 ? Math.round((attended / total) * 100) : 0
+  const rateTone = rate >= 90 ? 'text-emerald-600' : rate >= 75 ? 'text-amber-600' : 'text-red-600'
+  const rateBar = rate >= 90 ? 'bg-emerald-500' : rate >= 75 ? 'bg-amber-500' : 'bg-red-500'
+
+  return (
+    <Section
+      icon={<ClipboardCheck className="h-4 w-4 text-violet-500" />}
+      title={`Présences (${total} appel${total > 1 ? 's' : ''})`}
+      action={
+        total > 0 ? (
+          <span className={`text-sm font-bold tabular-nums ${rateTone}`} title="Taux d'assiduité (présent + retard)">
+            {rate}% d&apos;assiduité
+          </span>
+        ) : undefined
+      }
+    >
+      {total === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--color-border)] p-6 text-center">
+          <p className="text-sm font-medium text-[var(--color-text)]">Aucun appel enregistré pour cet élève</p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Les présences se marquent depuis la page Présences, groupe par groupe.
+          </p>
+          <Link
+            href="/presences"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-100"
+          >
+            Faire l&apos;appel
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Compteurs annuels */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(Object.keys(ATTENDANCE_CONFIG) as Array<keyof typeof counts>).map((key) => {
+              const cfg = ATTENDANCE_CONFIG[key]!
+              const Icon = cfg.icon
+              return (
+                <div key={key} className={`rounded-xl p-3 ring-1 ${cfg.bg}`}>
+                  <div className={`flex items-center gap-1.5 text-xs font-medium ${cfg.text}`}>
+                    <Icon className="h-3.5 w-3.5" />
+                    {cfg.label}
+                  </div>
+                  <p className={`mt-1 text-2xl font-bold tabular-nums ${cfg.text}`}>{counts[key]}</p>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Barre d'assiduité */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="font-medium text-[var(--color-text)]">Assiduité sur l&apos;année</span>
+              <span className="font-semibold tabular-nums text-[var(--color-text-muted)]">{attended}/{total} cours suivis</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-[var(--color-bg)] ring-1 ring-[var(--color-border)]">
+              <div className={`h-full rounded-full transition-all duration-300 ${rateBar}`} style={{ width: `${Math.max(rate, 3)}%` }} />
+            </div>
+          </div>
+
+          {/* Historique détaillé */}
+          <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            {attendance.map((entry) => {
+              const cfg = ATTENDANCE_CONFIG[entry.status] ?? ATTENDANCE_CONFIG.present!
+              const Icon = cfg.icon
+              const date = entry.session?.session_date
+              return (
+                <div
+                  key={entry.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="text-base">{entry.session?.group?.level?.emoji ?? '📋'}</span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[var(--color-text)]">
+                        {date ? new Date(date).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                      </p>
+                      <p className="truncate text-xs text-[var(--color-text-muted)]">
+                        {entry.session?.group?.name ?? 'Groupe'}
+                        {entry.notes ? ` · ${entry.notes}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cfg.bg} ${cfg.text}`}>
+                    <Icon className="h-3 w-3" />
+                    {cfg.label}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </Section>
   )
 }
 

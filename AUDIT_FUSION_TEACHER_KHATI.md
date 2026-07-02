@@ -299,4 +299,41 @@ L'utilisateur confirme : **il n'existe aucune vraie famille, nulle part**. Toute
   - `src/components/eleves/StudentProfile.tsx` — badge doré « N° 20-00001 » dans l'en-tête de la section Famille (équivalent du badge du legacy).
   - `src/app/api/public-registration/route.ts` — N° inclus dans les messages WhatsApp parent et admin.
   - `tsc --noEmit` : 0 erreur.
-- **Migration 016 appliquée + trigger testé de bout en bout (2026-07-02)** : séquence par site (2000001 → 2000002), préfixes corrects par site (10/20), repli 99 sans site — 4/4 cas conformes, familles de test supprimées après coup. **✅ Fonctionnalité N° d'inscription TERMINÉE côté code/base.** Reste : commit + push + déploiement Vercel pour la voir en production.
+- **Migration 016 appliquée + trigger testé de bout en bout (2026-07-02)** : séquence par site (2000001 → 2000002), préfixes corrects par site (10/20), repli 99 sans site — 4/4 cas conformes, familles de test supprimées après coup.
+- **Déployé en production (2026-07-02)** : PR #2 mergée (`main` @ `0261ffd`), check Vercel `success`, déploiement Production confirmé sur `resume-teacher-khati.vercel.app`. **✅ Fonctionnalité N° d'inscription TERMINÉE de bout en bout (code + base + prod).**
+- ⚠️ Note pour l'utilisateur : les familles déjà en base **avant** le trigger n'ont pas de numéro rétroactif (le trigger ne s'active qu'à la création). Sans objet ici puisque ces familles sont des données de test à purger avant la rentrée (voir plus haut) — pas de rattrapage nécessaire.
+
+### 2026-07-02 (suite) — Peuplement de données de test (150 élèves, Mercredi/Samedi)
+
+À la demande de l'utilisateur, génération de données de test pour peupler l'app (voir/tester Planning, Présences, badge N° d'inscription) : `scripts/migration/seed-test-students.mjs` (dry-run par défaut, `--commit` pour écrire, idempotent sur groupes/schedules).
+
+- **Périmètre : les 3 sites canoniques uniquement** (Maison-Alfort, Champigny Taxi Phone, Maison Pour Tous Bois l'Abbé) — les doublons ambigus « Champigny »/« Taxi Phone » volontairement exclus, non touchés.
+- **150 familles + 150 élèves + 150 enrollments** créés : 10 par (site × niveau), répartition égale confirmée (30/niveau).
+- **9 groupes créés, 6 réutilisés** (Maison-Alfort avait déjà ses 5 groupes ; Champigny Taxi Phone avait déjà son groupe Preschoolers) — aucune donnée existante modifiée ou dupliquée.
+- **24 créneaux créés, 6 déjà présents** — tous les groupes ont désormais un cours Mercredi (jour 2) ET Samedi (jour 5), horaires distincts par (site, niveau) pour éviter tout chevauchement.
+- **Bug corrigé en cours de route** : premier essai a échoué sur `schedules.user_id NOT NULL` (colonne oubliée dans l'insert) — 20 familles/élèves/enrollments partiels créés avant l'échec, nettoyés proprement via le tag avant de corriger et relancer à blanc.
+- **Vérifié après coup** : N° d'inscription auto confirmé en conditions réelles à l'échelle (Maison-Alfort → 2000001, 2000002, 2000003… séquentiel correct).
+- **Toutes les données portent le tag `notes = "TEST — génération en masse 2026-07-02"`** — purge en une requête (`.eq('notes', TAG)` sur les 3 tables) au moment de préparer la vraie rentrée 2026-2027.
+
+### 2026-07-02 (suite) — Section « Mode Test » dans l'app + refonte ultra-premium
+
+**V1 livrée puis refondue après retour utilisateur (« pas assez structuré/ludique/premium »).**
+
+- **Backend** : `src/lib/test-data.ts` (générer/statut/purger, tag `TEST_MODE::`, compatible avec le tag CLI pour une purge unique), routes `GET|DELETE /api/test-data` + `POST /api/test-data/generate` (auth admin via `withApiAuth`).
+- **Défaut de structure corrigé** : la page V1 rendait un `<Header>` en double (le layout `/settings` en fournit déjà un + la barre d'onglets `SettingsNav`, où « Mode Test » n'apparaissait pas). V2 : plus de header dupliqué, onglet **Mode Test** ajouté à `SettingsNav` (icône FlaskConical) + entrée Sidebar section Système.
+- **Refonte V2 au vocabulaire exact du dashboard** (la référence premium du projet) : `FadeIn` staggeré, hero 2 colonnes `rounded-2xl` (pill d'état actif/propre, kicker uppercase, 3 `HeroMetric`, liens « Explorer » vers Élèves/Planning/Présences avec hover lift + flèche), **parcours gamifié en 3 étapes numérotées** (01 Générer avec stepper −/+ et libellé dynamique « Générer N élèves » · 02 Vérifier avec checklist verte · 03 Purger en zone de danger rose isolée), panneaux « Répartition par site / par niveau » avec barres colorées aux couleurs réelles des sites/niveaux + emojis de niveaux, `tabular-nums` partout, dark mode complet.
+- **Badge N° d'inscription raffiné** (StudentProfile) : dégradé doré, icône Hash, `tabular-nums`, variante dark.
+- **Vérifié dans le navigateur réel** (serveur dev + compte jetable supprimé après coup) : structure single-header confirmée, stepper interactif OK (libellé recalculé en direct), 0 erreur console, répartitions affichées (55/site, 33/niveau avec emojis). `tsc` 0 erreur, build prod OK (`/settings/mode-test` 5.5 kB).
+- Note outillage : `preview_screenshot` expire sur ce poste (souci renderer local) — vérifications faites via snapshot d'accessibilité + innerText, fiables.
+
+### 2026-07-02 (suite) — Présences retrouvables + historique élève + refonte Familles & Paiements
+
+**Trois problèmes utilisateur traités en un lot :**
+
+1. **« Où est ma liste de présence sauvegardée ? »** — Cause racine double : (a) le dropdown « Présent » de Familles & Paiements était en réalité le **statut d'inscription** (`active`) mal étiqueté — corrigé en « Actif » + note explicative pointant vers /presences ; (b) aucun écran ne listait les appels enregistrés. **Ajouté** : panneau « Appels enregistrés » sur `/presences` (14 derniers jours, compteurs présents/absents, clic = rouvre l'appel), branché sur la route existante `GET /api/attendance/sessions`, rafraîchi après chaque sauvegarde.
+
+2. **Historique de présence annuel par élève** — Nouvelle section « Présences » sur le profil élève (`StudentProfile` + fetch dans `eleves/[id]/page.tsx`) : 4 compteurs annuels (Présent/Retard/Excusé/Absent), **taux d'assiduité** adaptatif (vert ≥90 %, ambre ≥75 %, rouge sinon), barre de progression, historique détaillé scrollable (date, groupe, statut, note), état vide avec lien vers l'appel.
+
+3. **Familles & Paiements débordait de l'écran** (tableau `min-w-[1900px]`, 12 colonnes mois) — **Refonte complète** au vocabulaire dashboard : hero + 4 HeroMetrics (dont « En retard » en alerte rouge), **mini-heatmap annuelle de 12 pastilles par famille** (initiale du mois, couleur statut, tooltip montant, mois courant cerclé), ligne compacte cliquable → **détail déplié** (enfants+statuts, grille 12 mois avec montants, actions Tarif/Dossier/Archiver), légende couleur, barre d'outils sticky conservée (recherche, site, période, actions collectives).
+
+**Vérifié en navigateur réel (compte jetable, supprimé après)** : cycle complet appel → sauvegarde → panneau « Appels enregistrés » (« Juniors · Maison-Alfort — 10 présents · 1 absent ») → profil de l'élève absente (« 0 % d'assiduité · Absent 1 · 0/1 cours suivis ») ✅. Débordement : scrollWidth 1360 ≤ viewport 1366, et 375px mobile sans scroll horizontal ✅. Seules erreurs console : warnings dnd-kit préexistants du dashboard (hors périmètre). `tsc` 0 erreur, build prod OK.

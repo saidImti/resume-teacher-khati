@@ -7,7 +7,7 @@ import {
   Settings, ChevronRight, LogOut, Menu, Pin,
   GraduationCap, Sliders,
   Users, CalendarDays, Wallet, ClipboardCheck, UsersRound,
-  Wrench,
+  Wrench, FlaskConical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui'
@@ -37,6 +37,7 @@ const NAV_BOTTOM = [
   { href: '/settings',                    label: 'Paramètres',       icon: Settings      },
   { href: '/settings/annees',             label: 'Années scolaires', icon: GraduationCap },
   { href: '/settings/fonctionnalites',    label: 'Fonctionnalités',  icon: Sliders       },
+  { href: '/settings/mode-test',          label: 'Mode Test',        icon: FlaskConical  },
 ]
 
 interface SidebarProps {
