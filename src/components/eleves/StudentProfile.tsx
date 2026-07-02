@@ -9,6 +9,7 @@ import {
   Plus, Loader2, X,
 } from 'lucide-react'
 import type { Student, Enrollment, Payment, Invoice } from '@/types'
+import { formatRegistrationNumber } from '@/lib/utils'
 
 interface GroupOption {
   id: string
@@ -137,7 +138,20 @@ export function StudentProfile({ student, enrollments, payments, invoices, group
 
             {/* Famille */}
             {family && (
-              <Section icon={<Users className="h-4 w-4 text-violet-500" />} title="Famille">
+              <Section
+                icon={<Users className="h-4 w-4 text-violet-500" />}
+                title="Famille"
+                action={
+                  family.registration_number ? (
+                    <span
+                      className="rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-bold tracking-wide text-amber-800 ring-1 ring-amber-300"
+                      title="Numéro d'inscription de la famille"
+                    >
+                      N° {formatRegistrationNumber(family.registration_number)}
+                    </span>
+                  ) : undefined
+                }
+              >
                 <div className="space-y-3">
                   <ContactRow
                     name={`${family.parent1_first} ${family.parent1_last}`}

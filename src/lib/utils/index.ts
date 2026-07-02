@@ -94,6 +94,15 @@ export function getInitials(name: string): string {
     .slice(0, 2)
 }
 
+// ─── Numéro d'inscription ────────────────────────────────────
+// Stocké "2000001" (préfixe site + séquentiel 5 chiffres) → affiché "20-00001".
+export function formatRegistrationNumber(num: string | null | undefined): string {
+  if (!num) return '—'
+  const s = String(num)
+  if (s.length <= 5) return s
+  return `${s.slice(0, -5)}-${s.slice(-5)}`
+}
+
 // ─── Generate slug ───────────────────────────────────────────
 export function generateSlug(str: string): string {
   return str

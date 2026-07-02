@@ -355,6 +355,7 @@ export interface Family {
   primary_site_id: string | null
   custom_monthly_rate: number | null
   custom_rate_note: string | null
+  registration_number: string | null
   notes: string | null
   is_active: boolean
   created_at: string

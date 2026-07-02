@@ -47,4 +47,9 @@ Thumbs.db
 supabase/.branches/
 supabase/.temp/
 
+# Migration Fiche Inscription — état local et dumps de données réelles
+scripts/migration/.state/
+scripts/migration/*.dump.json
+scripts/migration/dumps/
+
 .vercel
