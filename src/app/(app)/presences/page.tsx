@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { Header } from '@/components/layout/Header'
-import { AttendanceClient } from '@/components/presences/AttendanceClient'
+import { PresencesTabs } from '@/components/presences/PresencesTabs'
 import type { Group, Site } from '@/types'
 
 // ─── Types locaux ─────────────────────────────────────────────────────────────
@@ -30,10 +30,10 @@ export default async function PresencesPage() {
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
         title="Présences"
-        subtitle="Faire l'appel · Marquer absents · Notifier les parents"
+        subtitle="Faire l'appel · Fiche de présence mensuelle, trimestrielle, annuelle"
       />
       <div className="flex-1 overflow-y-auto p-6">
-        <AttendanceClient
+        <PresencesTabs
           groups={(groups ?? []) as unknown as GroupWithRelations[]}
           sites={(sites ?? []) as unknown as Site[]}
         />
