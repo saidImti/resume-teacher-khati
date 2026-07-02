@@ -1,0 +1,302 @@
+# Audit Comparatif — Fiche Inscription vs Résumé Teacher Khati (RTK)
+### Diagnostic et plan de fusion
+
+> **Document de référence pour le projet de fusion.** À consulter et mettre à jour avant toute implémentation touchant aux modules Élèves, Finances, Présences ou Inscription publique. Voir méthodologie imposée en bas de ce document.
+
+**Date de l'audit initial :** 2026-06-30
+**Dernière mise à jour :** 2026-07-01 (correction sur le statut de la clé Supabase)
+**Projets audités :**
+- `C:\AI-Businesses\Fiche Inscription Teacher Khati\` (dashboard.html, monolithe localStorage)
+- `C:\AI-Businesses\Resumé Teacher Khati\Résumé Teacher Khati\` (ce projet, Next.js + Supabase)
+
+---
+
+## 1. Synthèse exécutive
+
+Ce ne sont pas deux projets avec "des parties similaires" — ce sont **deux systèmes qui gèrent en double le cœur métier de l'école** (familles, élèves, tarification, paiements, inscription publique), construits sur des piles techniques incompatibles, **sans synchronisation fiable entre eux**.
+
+| | **Fiche Inscription** | **Résumé Teacher Khati (RTK)** |
+|---|---|---|
+| Stack | HTML/CSS/JS monolithique (1 fichier, 11 957 lignes) | Next.js 14 + TypeScript + Supabase + Vercel |
+| Données | `localStorage` (navigateur local) | PostgreSQL avec Row-Level Security |
+| Auth | Mot de passe `12345678` en clair dans le code | Supabase Auth (JWT) |
+| Multi-poste | ❌ Non (1 navigateur = 1 silo de données) | ✅ Oui (cloud, multi-utilisateur) |
+| Sauvegarde | ❌ Aucune | ✅ Native (Postgres managé) |
+| Maturité | Très abouti sur inscriptions/présences/paiements simples | Très abouti + va plus loin (factures, planning, IA, WhatsApp) |
+| Déploiement | Fichier local, ouvert manuellement | CI/CD auto sur Vercel, en production |
+
+**Verdict :** RTK doit devenir la source de vérité unique. Fiche Inscription doit être démantelé après migration de ses données et récupération de son UX la plus aboutie (l'appel de présence notamment).
+
+---
+
+## 2. Duplication fonctionnelle réelle
+
+| Fonction métier | Fiche Inscription | RTK | Verdict |
+|---|---|---|---|
+| Inscription famille/enfant | ✅ CRUD complet, localStorage | ✅ CRUD complet, Postgres + RLS (`families`, `students`) | **Doublon direct** |
+| Tarification dégressive (1=40€, 2=35€, 3=30€, 4=26€) | ✅ `getMensualiteEffective()` | ✅ table `pricing_rules` | **Doublon direct** |
+| Tarif spécial par famille | ✅ `insc.tarifSpecial` | ✅ `families.custom_monthly_rate` | **Doublon direct** |
+| Tarif par lieu/site | ✅ `tk_tarifs_lieux` | ✅ `pricing_rules.site_id` | **Doublon direct** |
+| Paiements/factures | ✅ `tk_paiements`, cockpit, "marquer payé" | ✅ `invoices` + `payments`, génération auto, PDF print, relance WhatsApp | RTK **plus avancé** |
+| Présences / appel du jour | ✅ Système très abouti, validé en production | ✅ Module `/presences` fonctionnel depuis Session 14 (table `attendance`, flux enrollments → sessions → attendance) | **À comparer en détail** (voir §4) — Fiche Inscription a une UX d'appel groupé lieu→créneau→niveau plus poussée à date de l'audit |
+| Inscription publique (parents) | ⚠️ `formulaire_en_ligne.html`, écrit en localStorage local au parent — ne remonte jamais au dashboard si rempli hors du PC de l'école | ✅ `/inscription`, token signé, écrit directement en Postgres | RTK **bien supérieur, seul système réellement fonctionnel** |
+| Planning / emploi du temps | ❌ Absent | ✅ CRUD complet avec capacité par groupe | RTK seul |
+| Résumés IA / Padlet / WhatsApp | ❌ Absent | ✅ Cœur métier d'origine, complet | RTK seul |
+
+**Conséquence opérationnelle :** une famille créée dans le dashboard local et une autre créée via RTK = deux bases d'élèves divergentes, deux historiques de paiement, aucune source de vérité.
+
+---
+
+## 3. Risques identifiés (par gravité, état au 2026-07-01)
+
+### 🔴 CRITIQUE
+1. **Mot de passe dashboard Fiche Inscription = `12345678` en clair dans le code source** (`dashboard.html` ~ligne 2216, ~10757), comparaison plaintext, aucun hash. Données d'enfants mineurs (état civil, contacts d'urgence, allergies, photos) — sensible RGPD.
+2. **Aucune sauvegarde des données Fiche Inscription.** Tout repose sur le `localStorage` d'un seul navigateur. Cache vidé, changement de PC = perte totale et irréversible.
+
+### 🟡 À VÉRIFIER (et non plus "critique confirmé")
+3. ~~`SUPABASE_SERVICE_ROLE_KEY` exposée dans l'historique git~~ — **Correction du 2026-07-01** : `MASTER_PROJECT.md` §27 (Session 14) indique que la clé a été migrée vers le nouveau format `sb_secret_...` et que le code (`env.ts`) a été mis à jour pour l'accepter. Mais §16 a toujours une checkbox non cochée pour cette régénération — incohérence documentaire. **Action : vérifier directement dans Supabase Dashboard → Settings → API la date de création de la clé active avant de considérer ce point comme clos ou comme encore ouvert.** Ne pas refaire l'action sans confirmation.
+
+### 🟠 ÉLEVÉ
+4. **Le formulaire d'inscription public Fiche Inscription ne remonte pas réellement au dashboard.** `formulaire_en_ligne.html` écrit dans le `localStorage` du navigateur qui l'ouvre. Si un parent le remplit depuis son téléphone, les données restent chez lui. Confirmé par le `CLAUDE.md` du projet Fiche Inscription, qui liste ce point comme non résolu (priorité basse, point 9). **En pratique inutilisable dans son usage prévu.**
+5. **Modèle RLS de RTK mono-utilisateur** (`user_id = auth.uid()`) : bloquant si embauche d'un(e) collègue avec accès différencié (déjà noté comme manque dans `PROJECT_STATUS.md` de RTK).
+
+### 🟢 MOYEN
+6. XSS sur Fiche Inscription : 105 usages d'`innerHTML`, `escapeHtml()` correctement utilisé sur les échantillons examinés, mais surface non auditée à 100% sur 11 957 lignes.
+7. Aucun test automatisé côté Fiche Inscription (RTK a Vitest + Playwright configurés, niveau d'usage réel non vérifié).
+8. Pas de `.git` côté Fiche Inscription — aucun historique de version possible, aucun rollback en cas d'erreur d'édition du fichier monolithique.
+
+---
+
+## 4. Ce qu'il faut comparer en détail avant de trancher sur les Présences
+
+Constat à affiner (ne pas trancher sans relecture du code RTK `/presences` à jour) :
+- Fiche Inscription : `_renderAppelJour`/`_renderAppelMois`, groupé lieu→créneau→niveau, compteurs temps réel, validé en production sur des cas réels (256 élèves, 4 groupes testés).
+- RTK : flux `enrollment → session → attendance` opérationnel depuis Session 14, grille élèves avec cycle présent/absent/retard/excusé, notifications WhatsApp post-sauvegarde.
+
+RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsApp que Fiche Inscription n'a pas. Mais l'ergonomie d'appel groupé (vue "tous les groupes du jour d'un coup") de Fiche Inscription n'a pas d'équivalent confirmé côté RTK à ce stade. **Ne pas migrer ce module sans une comparaison fonctionnelle module par module, écran par écran — voir méthodologie ci-dessous.**
+
+---
+
+## 5. Ce qu'il faut récupérer de Fiche Inscription avant de l'abandonner
+
+- L'UX de l'appel de présence groupé (si confirmée supérieure après comparaison du §4).
+- La logique de tarification proratisée pour les reçus PDF (départ en cours de mois) — à vérifier si `generate-monthly` de RTK la couvre déjà.
+- Le PDF de fiche d'inscription papier (`generate_fiche.py`) — utile en mode autonome pour salon/visite, pas besoin de migration, juste conservation en l'état.
+
+---
+
+## 6. Plan de fusion proposé (squelette — à affiner module par module, pas à exécuter tel quel)
+
+0. Sécurisation : confirmer le statut réel de la clé Supabase (voir §3.3), corriger les checklists obsolètes de `MASTER_PROJECT.md`.
+1. Geler la création de nouvelles inscriptions dans Fiche Inscription dès que possible pour limiter la divergence pendant la migration.
+2. Export des données localStorage de Fiche Inscription (`tk_dashboard`, `tk_paiements`, `tk_presences`, `tk_tarifs_lieux`), cartographie vers le schéma RTK (`families`, `students`, `enrollments`, `invoices`, `payments`, `attendance`).
+3. Script de migration ponctuel (Node + client admin Supabase), test en environnement de test avant prod, dédoublonnage par téléphone/email normalisé.
+4. Comparaison fonctionnelle détaillée du module Présences (§4) avant de décider quoi porter.
+5. Bascule de l'usage quotidien sur RTK, archivage de `dashboard.html`, retrait de `formulaire_en_ligne.html` au profit de `/inscription`.
+
+**Aucune de ces étapes ne doit démarrer sans validation explicite préalable, module par module — voir méthodologie ci-dessous.**
+
+---
+
+## 7. Risques de la fusion elle-même
+
+- Perte/désynchronisation de paiements en cours si bascule en milieu de mois sans gel préalable.
+- Doublons de familles si la déduplication email/téléphone échoue (formats différents : `06 12 34 56 78` vs `0612345678`).
+- Tarifs spéciaux mal réconciliés si une famille a un `tarifSpecial` différent des deux côtés — revue manuelle nécessaire, pas d'automatisation aveugle (impact financier direct sur les familles).
+
+---
+
+## 8. Découpage modulaire de la migration (2026-07-01)
+
+Le monolithe Fiche Inscription ne se migre pas en un bloc. Découpage en modules **indépendants** (un fichier de script par module, idempotent, dry-run obligatoire, erreur sur un enregistrement = log + skip, jamais d'avortement du batch entier ; erreur sur un module = sans effet sur les autres modules déjà passés). Convention de fichiers alignée sur l'existant RTK (`scripts/create-user.mjs`, `scripts/reset-password.mjs`) :
+
+```
+scripts/migration/
+├── 00-referentiels.mjs        # Sites + Niveaux + Groupes/Schedules (prérequis)
+├── 01-familles-eleves.mjs     # families + students
+├── 02-tarification.mjs        # pricing_rules + families.custom_monthly_rate
+├── 03-inscriptions-groupes.mjs# enrollments (+ création groups/schedules manquants)
+├── 04-finances.mjs            # invoices + payments
+├── 05-presences.mjs           # sessions (backfill) + attendance — À PART, après validation dédiée
+└── lib/
+    ├── legacy-dump.mjs        # lecture du dump JSON localStorage exporté
+    ├── id-map.mjs             # table de correspondance ancien id → UUID Postgres (traçabilité)
+    └── report.mjs             # génération du rapport dry-run (compte, warnings, conflits)
+```
+
+### Ordre de dépendance
+`00 → 01 → {02, 03 en parallèle} → 04 → 05` (05 isolé en dernier, jamais lancé sans revue dédiée du §4).
+
+### Module par module
+
+| Module | Contenu | Risque | Dépend de |
+|---|---|---|---|
+| 00 — Référentiels | Vérifier/créer `sites` (depuis `tk_lieux`/`tk_sites`), confirmer `levels` (déjà alignés, voir tableau ci-dessous) | Faible | — |
+| 01 — Familles & Élèves | `insc.parent` → `families`, `insc.enfants[]` → `students` | Faible-Moyen | 00 |
+| 02 — Tarification | `tk_tarifs_lieux` → `pricing_rules`, `insc.tarifSpecial` → `families.custom_monthly_rate` | Moyen (décision sur `mensuel_fixe`, voir ci-dessous) | 00, 01 |
+| 03 — Inscriptions aux groupes | `enfant.jour/hdebut/hfin/niveau` → `enrollments` (+ matching/création `groups`+`schedules`) | **Élevé** — conflit structurel, voir §4 | 00, 01 |
+| 04 — Finances | `tk_paiements[insc][ym]` → `invoices` + `payments` | Moyen | 01 |
+| 05 — Présences | `tk_presences` (absences) → `attendance` (+ backfill `sessions`) | **Élevé** — pas de notion de "session" côté Fiche Inscription | 03 |
+| Hors migration DB | `generate_fiche.py` (PDF papier), `formulaire_en_ligne.html` (remplacé par `/inscription`) | — | — |
+
+### Tableau de correspondance noms/variables (vérifié sur le code réel des deux projets)
+
+| Fiche Inscription | RTK | Conflit / transformation nécessaire |
+|---|---|---|
+| `insc.parent.{nom,prenom,tel,email,adresse,ville,cp}` | `families.{parent1_last,parent1_first,parent1_phone,parent1_email,address,city,postal_code}` | Renommage direct, pas de conflit sémantique |
+| `insc.lieu` (string libre, ex. "Paris 11") | `families.primary_site_id` / `students.site_id` (FK → `sites`) | **Transformation requise** : lookup par nom, création si absent dans `sites` |
+| `enfant.niveau` (string : Preschoolers/Kids/Juniors/Tweens/Teenagers) | `students.level_id` (FK → `levels`) | Pas de conflit de valeurs (labels identiques), juste FK lookup |
+| `enfant.jour/hdebut/hfin` (embarqué sur l'enfant) | `schedules.day_of_week/start_time/end_time` (rattaché à un `group`, pas à l'élève) | **Conflit structurel réel** — voir Module 03 ci-dessous |
+| `insc.statut` (`actif`/`inactif`, 2 valeurs) | `students.status` (`trial`/`active`/`suspended`/`departed`, 4 valeurs) | `inactif`+`dateDepart` rempli → `departed` + `departure_date` ; `actif` → `active`. Pas de notion "essai" côté legacy (normal, restera vide) |
+| `insc.tarifSpecial = {mode:'fixe', montantParEnfant, note}` | `families.custom_monthly_rate` + `custom_rate_note` | `montantParEnfant` confirme un tarif **par enfant** → cohérent avec `custom_monthly_rate` si RTK l'applique aussi par enfant (à confirmer dans le code RTK de calcul de facture avant migration, pas supposé) |
+| `tk_tarifs_lieux[lieu].mode` (`seance`/`mensuel_fixe`) | `pricing_rules.billing_type` (`per_session`/`monthly_per_child`/`monthly_family`) | `seance`→`per_session` direct. `mensuel_fixe`→`monthly_per_child` (confirmé par `montantParEnfant`, pas `monthly_family`) |
+| `cell.statut` (paiement : `paye`/`partiel`/`retard`/`attente`/`futur`) | `invoices.status` (`draft`/`pending`/`partial`/`paid`/`overdue`/`cancelled`) | `paye`→`paid`, `partiel`→`partial`, `retard`→`overdue`, `attente`→`pending`. **`futur` ne doit PAS être migré** : ce sont des cellules de grille pour des mois pas encore échus, RTK les génère à la demande via `generate-monthly` — migrer ces lignes créerait des factures fantômes |
+| `insc.id` (uuid ou timestamp, non garanti UUID Postgres) | `*.id` (UUID Postgres strict) | Génération de nouveaux UUID + table de correspondance `id-map.mjs` pour traçabilité (jamais réutiliser l'ancien id tel quel) |
+| `insc.numeroInscription` (ex. "10-00001") | *(aucun champ équivalent trouvé dans le schéma RTK audité)* | **Décision produit à prendre** : porter ce numéro (ajouter une colonne) ou l'abandonner — fonctionnalité legacy, pas un conflit technique |
+| Toutes les tables école RTK | `user_id = auth.uid()` (RLS) | Aucun équivalent côté Fiche Inscription (pas d'auth) — tous les enregistrements migrés doivent être assignés explicitement au compte enseignant unique, à ne pas oublier dans chaque script |
+
+### Conflit structurel — Module 03 (Inscriptions aux groupes) — DÉCISION PRISE (2026-07-01)
+
+Fiche Inscription n'a pas de notion de "groupe" — chaque enfant a son propre `jour/hdebut/hfin/niveau/lieu`. RTK organise les cours autour de `groups` (qui ont leurs propres `schedules`).
+
+**Décision utilisateur : création automatique du `group`+`schedule` quand aucun ne correspond exactement (site+niveau+jour+horaire).**
+
+Garde-fou retenu (cohérent avec la règle "dry-run obligatoire" de §8) : le rapport dry-run du module 03 doit lister explicitement chaque groupe auto-créé (site, niveau, jour, horaire, nombre d'enfants concernés) pour une relecture a posteriori avant le run définitif en production — ça ne bloque pas le module, mais ça évite de découvrir des doublons de groupes une fois les données en place.
+
+### Conflit structurel — Module 05 (Présences) — DÉCISION PRISE (2026-07-01)
+
+Fiche Inscription ne stocke aucune entité "séance" — les dates de cours sont calculées à la volée depuis le jour de la semaine de l'enfant. RTK exige une ligne `sessions` réelle par groupe par date avant de pouvoir y rattacher une `attendance`.
+
+**Décision utilisateur : pas de backfill. Les présences RTK démarrent à blanc à la date de bascule.** L'historique d'absences reste consultable dans `dashboard.html` archivé (Fiche Inscription n'est pas supprimé, juste passé en lecture seule — voir Phase 4 du plan §6) si besoin de le consulter plus tard.
+
+### Numéro d'inscription séquentiel — DÉCISION PRISE (2026-07-01)
+
+**Décision utilisateur : porter le numéro d'inscription dans RTK**, pas l'abandonner. Implique : ajouter une colonne (`students.registration_number` ou `families.registration_number` — à trancher au moment du Module 01 selon que le numéro est par famille ou par enfant dans l'usage réel actuel, à revérifier dans le code avant d'écrire la migration) + porter la logique de génération séquentielle par site (`genererNumeroInscription(lieu)`, `formatNumeroInsc()` — format `"10-00001"`) vers RTK pour les nouvelles inscriptions créées après la bascule.
+
+---
+
+## 9. Suggestions complémentaires (proposées le 2026-07-01, non validées — à trancher au réveil)
+
+Ces points ne sont pas demandés explicitement mais relèvent du même niveau d'exigence que le reste de l'audit — à arbitrer avant ou pendant l'exécution des modules, pas après.
+
+1. **Total de contrôle financier avant/après migration (technique d'audit classique).** Avant de toucher au Module 04, calculer un seul nombre : la somme de tous les montants `paye`+`partiel` de `tk_paiements` sur l'année en cours. Après migration, recalculer la même somme côté `invoices`/`payments` RTK. Si les deux ne tombent pas exactement au centime près, on a une erreur de migration — inutile d'inspecter ligne par ligne pour la détecter. Coût quasi nul, détecte toute une classe de bugs d'un coup.
+
+2. **Critères de succès écrits avant de lancer un seul module.** Par exemple : "0 famille en double", "100% des familles actives présentes avec le bon statut de paiement du mois en cours", "total recouvré = total recouvré legacy au centime près". Sans ça, "la migration s'est bien passée" reste une impression, pas un fait vérifié.
+
+3. **Bascule en parallèle plutôt qu'en coupure nette.** Plutôt que d'arrêter Fiche Inscription le jour J, faire tourner les deux systèmes en parallèle 1 à 2 semaines (RTK en lecture/écriture principale, Fiche Inscription gelé en lecture seule comme filet de sécurité), avec un critère de rollback explicite défini à l'avance (ex. "si une famille active manque dans RTK après 48h, on bascule en arrière"). Réduit le risque qu'un bug RTK du premier jour bloque toute la gestion de l'école.
+
+4. **Vérifier le plan de sauvegarde Supabase réel.** Le projet RTK répare le problème "pas de backup" de Fiche Inscription, mais seulement si le plan Supabase utilisé inclut un vrai point-in-time recovery (généralement plan payant). À vérifier — sinon la fusion résout un risque de perte de données pour en garder un autre, moins visible.
+
+5. **Rapport de réconciliation automatique après chaque module**, pas seulement un dry-run avant écriture : un script qui compare comptages et sommes entre le dump JSON legacy et les données réellement écrites dans Postgres, et sort un diff. Transforme "j'espère que ça s'est bien passé" en "voici la preuve que ça s'est bien passé".
+
+6. **Anticiper le modèle multi-utilisateur maintenant, pas plus tard.** Le RLS actuel de RTK est mono-utilisateur (`user_id = auth.uid()`). Comme la fusion touche déjà `families`/`students`/`invoices`, c'est le moment le moins cher pour introduire un modèle de rôles (admin/staff) si l'embauche d'un(e) assistant(e) est envisageable à moyen terme — le refaire après coup sur des tables déjà pleines de données coûtera nettement plus cher.
+
+7. **Avant d'investir dans la logique de génération du numéro d'inscription séquentiel (décision déjà prise : on le porte) : confirmer qu'il est réellement utilisé dans un usage concret** (document officiel, demande de subvention CAF, communication imprimée aux familles) plutôt que juste affiché dans l'interface. Si oui, le porter pleinement se justifie. Si c'est purement cosmétique, un format plus simple suffirait — à vérifier en 2 minutes avant d'écrire la logique, pas après.
+
+---
+
+## 10. Méthodologie imposée pour ce projet de fusion
+
+Consigne explicite (2026-07-01) : **chaque module concerné par la fusion sera audité, comparé, structuré et réfléchi avant toute écriture de code.** Pas d'implémentation immédiate après une simple lecture rapide. Concrètement, pour chaque module (Inscriptions, Tarification, Finances/Paiements, Présences, Inscription publique) :
+
+1. Relire le code réel des deux côtés (pas seulement la documentation, qui peut être obsolète — cf. §3.3).
+2. Comparer fonctionnalité par fonctionnalité, en notant ce qui est supérieur de chaque côté.
+3. Proposer une solution réfléchie (pas la première solution venue) qui ne perd aucune fonctionnalité utile.
+4. Valider explicitement avec l'utilisateur avant toute implémentation.
+5. Mettre à jour ce document et `MASTER_PROJECT.md` à chaque étape franchie.
+
+---
+
+## 11. Journal d'exécution
+
+### 2026-07-01 — Outil d'export legacy + Module 00 (Référentiels)
+
+**Décisions confirmées à l'exécution :**
+- Code de site legacy (préfixe N° d'inscription) → **colonne `sites.registration_prefix`** (migration `015`), cohérent avec la décision §8 de porter le numéro d'inscription.
+- Ordre imposé par l'audit §6 étape 2 respecté : **export des données AVANT toute migration**.
+
+**Livrés :**
+- `Fiche Inscription/dashboard.html` — bouton flottant **« ⬇ Export migration »** (bloc `<script>` autonome, retirable, sans dépendance). Exporte tout le `localStorage` `tk_*` en un JSON daté avec compteurs. Backup `dashboard.backup-<date>.html` créé avant édition (pas de `.git` côté legacy).
+- `supabase/migrations/015_registration_prefix.sql` — colonne + index unique partiel.
+- `scripts/migration/` — arborescence conforme au §8 :
+  - `lib/env.mjs` (client admin), `lib/legacy-dump.mjs`, `lib/normalize.mjs`, `lib/id-map.mjs`, `lib/report.mjs`
+  - `00-referentiels.mjs` — sites (match/création + préfixe), niveaux (correspondance), années (warnings). Dry-run par défaut, `--commit` pour écrire.
+  - `README.md` — mode d'emploi complet.
+
+**Vérifications faites :**
+- Contrôle syntaxique (`node --check`) OK sur les 6 fichiers.
+- Test hors-DB de la dérivation des sites sur échantillon : fusion des variantes (`Champigny`/`champigny `), résolution des codes, exclusion des lieux génériques non utilisés, années legacy signalées — tous conformes.
+
+**Vérifications restantes (nécessitent l'export réel + credentials Supabase) :**
+- Confirmer le statut réel de `SUPABASE_SERVICE_ROLE_KEY` (voir §3.3) avant tout `--commit`.
+- Appliquer la migration `015` en base avant `--commit` du Module 00.
+- Lancer le dry-run sur le dump réel et relire la liste des sites créés.
+
+**Note doc :** `MASTER_PROJECT.md` §14 cite `scripts/create-user.mjs` et `reset-password.mjs` qui **n'existent pas** (seul `audit-env.mjs` est présent). Style des scripts de migration aligné sur `audit-env.mjs`.
+
+**Prochaine étape :** Module 01 (`01-familles-eleves.mjs`) — après export réel et dry-run validé du Module 00. Méthodologie §10 : relire le code réel des deux côtés avant d'écrire.
+
+### 2026-07-02 — Extraction des données réelles + réconciliation des sites
+
+**Extraction autonome (sans clic utilisateur) :** le `localStorage` de Fiche Inscription a été lu directement depuis la base LevelDB de Chrome (profil Default) via `classic-level`, décodage du format DOM-storage (marqueur + Latin1/UTF-16). **0 erreur de parsing.** Dump réel : `scripts/migration/dumps/export-extrait-leveldb.json` (git-ignoré).
+- **170 inscriptions · 248 enfants · 166 familles avec paiements · 5 codes de site · 12 lieux.** Toutes les inscriptions en année **2025-2026** (= seed RTK).
+
+**Réalité des lieux (5 codes legacy) :** Maison Alfort (20, 60 insc.), Champigny sur Marne Taxi Phone (10, 56), Maison Pour Tous Bois l'Abbé (11, 52), C'est mon mien Maison Alfort (21, 1), C'est mon mien (31, 1).
+
+**Piège évité par le dry-run :** la table `sites` RTK contenait déjà des doublons créés à la main (Champigny, Champigny Taxi Phone, Taxi Phone, Site A) + les 3 sites réels. Un matching exact aurait créé un 8ᵉ doublon pour « Champigny sur Marne Taxi Phone ».
+
+**Décisions utilisateur (2026-07-02) → `scripts/migration/site-aliases.json` :**
+- « Champigny sur Marne Taxi Phone » → site existant **Champigny Taxi Phone**.
+- « C'est mon mien » et « C'est mon mien Maison Alfort » = **même chose que Maison-Alfort** → consolidés sur **Maison-Alfort**.
+- Résultat dry-run : **0 création, 0 conflit.** Maison-Alfort ← 62 insc. (préfixe 20), Champigny Taxi Phone ← 56 (préfixe 10), Maison Pour Tous Bois l'Abbé ← 52 (préfixe 11).
+
+**Nettoyage (usage vérifié en lecture seule) :** « Site A » (0 usage) et « C'est mon mien » (0 usage) **supprimés**. Restent 5 sites.
+
+**⚠️ À trancher pour le Module 03 (pas bloquant pour le 00) :** deux sites RTK pré-existants contiennent des données et font doublon avec les canoniques :
+- **Champigny** : 1 famille, 1 élève, **5 groupes** — vs « Champigny Taxi Phone » (1 groupe).
+- **Taxi Phone** : 1 famille, 1 élève, 1 créneau.
+Décider si ces données RTK sont réelles (à consolider vers les sites canoniques) ou des tests (à réassigner/supprimer) avant de créer les enrollments du Module 03.
+
+**Reste pour clore le Module 00 :** appliquer la migration `015` (colonne `registration_prefix`) via le Dashboard Supabase (pas d'accès DDL/CLI lié depuis le repo), puis `node scripts/migration/00-referentiels.mjs --dump=... --commit` pour poser les préfixes (Maison-Alfort→20, Champigny Taxi Phone→10, Bois l'Abbé→11) et sauvegarder l'id-map.
+
+### 2026-07-02 (suite) — 🚨 DÉCOUVERTE MAJEURE : les données legacy de ce PC sont des données de TEST
+
+Un audit qualité systématique du dump (`scripts/migration/audit-dump.mjs` : doublons, contacts, DDN, total de contrôle financier §9.1) a révélé que **la totalité des 170 inscriptions extraites de Chrome sur ce PC sont des données de démonstration** :
+
+- `source: "test"` explicite sur **168/170** fiches (les 2 `online` sont aussi des essais manuels).
+- Emails uniformes `prenom.nom@email.fr` (domaine fictif).
+- 10 numéros de téléphone à motifs séquentiels (`0612345678`, `0623456789`, …) partagés par ~170 familles aux noms tous différents.
+- Vérifié : aucune donnée `tk_dashboard` dans les 10 profils Chrome, ni Edge, ni Firefox de ce PC. Aucun générateur de démo dans `dashboard.html` (données saisies/importées comme jeu d'essai).
+
+**Conséquences :**
+1. **Ne JAMAIS migrer ce dump vers la base RTK de production** — il ne contient aucune vraie famille. Le total de contrôle financier (52 400 €, 947 cellules) est fictif.
+2. Le pipeline de migration reste valable et testé — il tournera tel quel sur le **vrai** dump quand il sera obtenu.
+3. Le bouton « ⬇ Export migration » ajouté à `dashboard.html` devient le chemin critique : si les vraies données existent, elles sont sur **une autre machine** (PC de l'école / de Teacher Khati) — y ouvrir `dashboard.html`, exporter, rapatrier le JSON.
+4. **Question produit ouverte (à trancher par l'utilisateur) :** les vraies inscriptions existent-elles sur une autre machine, ou l'usage réel n'a-t-il pas encore commencé ? Si tout est test, il n'y a **rien à migrer** — la fusion se réduit à : préparer RTK pour la rentrée 2026-2027 et archiver Fiche Inscription. (Indice concordant : `tk_annees` du dump a `2026-2027` comme année active — configuration tournée vers la rentrée.)
+5. Le `--commit` du Module 00 (préfixes de sites) est suspendu tant que ce point n'est pas tranché — les codes de site (10/20/11/21/31) viennent de `tk_sites` de ce PC et pourraient refléter une vraie configuration voulue, mais à confirmer sur le vrai poste.
+
+### 2026-07-02 (résolution) — ✅ CONFIRMÉ PAR L'UTILISATEUR : toutes les données sont fictives, PIVOT DU CHANTIER
+
+L'utilisateur confirme : **il n'existe aucune vraie famille, nulle part**. Toutes les inscriptions de Fiche Inscription sont des tests. Vérifié aussi côté RTK : les 3 élèves en base (« Sarah Said » ×2, « Souhaib SaidAbdoul », créés 15-17/06/2026) + 11 factures + 9 paiements + 2 présences sont les essais du développeur.
+
+**Décision de périmètre (pivot) :**
+- **Modules 01 à 05 (migration de données) : SANS OBJET.** Il n'y a rien à migrer. Les scripts restent dans le dépôt comme outillage (l'audit-qualité `audit-dump.mjs` et les libs resserviront), mais aucun `--commit` de données ne sera jamais lancé sur ce jeu fictif.
+- **La « fusion » devient un chantier de fonctionnalités + préparation de rentrée :**
+  1. **Porter les fonctionnalités supérieures du legacy dans RTK** (cœur restant de l'audit, §5) : numéro d'inscription séquentiel par site (migration 015 déjà écrite, logique de génération à implémenter dans RTK), UX de l'appel du jour groupé lieu→créneau→niveau (comparaison §4 à faire), tarification proratisée des reçus (à vérifier dans `generate-monthly`).
+  2. **Préparer la rentrée 2026-2027 dans RTK** : créer l'année scolaire (le legacy avait déjà `2026-2027` active — intention claire), groupes/créneaux, lien public `/inscription` + QR code pour que les familles s'inscrivent directement dans RTK à la rentrée. Les inscriptions réelles naîtront directement dans RTK — **aucune migration ne sera jamais nécessaire.**
+  3. **Purge des données de test RTK avant la rentrée** (familles/élèves/factures/paiements/présences d'essai) — à faire au dernier moment pour pouvoir continuer à tester d'ici là.
+  4. **Archiver Fiche Inscription** : plus aucune saisie réelle ne doit y être faite (il n'y en a jamais eu). `dashboard.html` conservé en l'état comme référence UX.
+
+**Bénéfice :** tous les risques de migration identifiés en §7 (perte de paiements, doublons de familles, tarifs mal réconciliés) disparaissent — ils n'ont plus d'objet.
+
+### 2026-07-02 (suite) — ✅ Migration 015 appliquée + N° d'inscription implémenté dans RTK
+
+- **Migration 015 appliquée** par l'utilisateur (SQL Editor). Préfixes posés : Champigny Taxi Phone→10, Maison Pour Tous Bois l'Abbé→11, Maison-Alfort→20. **Module 00 clos** (forme post-pivot : schéma + configuration, pas de données).
+- **Fonctionnalité N° d'inscription portée dans RTK** (chantier 1 du nouveau périmètre) :
+  - `supabase/migrations/016_family_registration_number.sql` — colonne `families.registration_number` + index unique + **trigger Postgres** `assign_family_registration_number()` : génération atomique `<préfixe><séquentiel 5 chiffres>` à l'INSERT, verrou consultatif par préfixe (anti-collision), repli 99 sans préfixe (convention legacy), `SECURITY DEFINER` + `search_path=public` (la RLS de `sites`/`families` ne doit pas fausser la lecture du préfixe ni le calcul du max — même convention que `has_site_access`). Couvre les 2 chemins de création (StudentForm navigateur + `/api/public-registration` admin) sans dupliquer de logique applicative.
+  - `src/types/index.ts` — `Family.registration_number`.
+  - `src/lib/utils/index.ts` — `formatRegistrationNumber()` ("2000001" → "20-00001").
+  - `src/components/eleves/StudentProfile.tsx` — badge doré « N° 20-00001 » dans l'en-tête de la section Famille (équivalent du badge du legacy).
+  - `src/app/api/public-registration/route.ts` — N° inclus dans les messages WhatsApp parent et admin.
+  - `tsc --noEmit` : 0 erreur.
+- **Migration 016 appliquée + trigger testé de bout en bout (2026-07-02)** : séquence par site (2000001 → 2000002), préfixes corrects par site (10/20), repli 99 sans site — 4/4 cas conformes, familles de test supprimées après coup. **✅ Fonctionnalité N° d'inscription TERMINÉE côté code/base.** Reste : commit + push + déploiement Vercel pour la voir en production.

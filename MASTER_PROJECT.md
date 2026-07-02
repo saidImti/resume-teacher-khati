@@ -1,7 +1,9 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-06-23** (v3.7 — Session 14 : fix presences complet, inscription élèves dans groupes, routes attendance corrigées)
+> Dernière mise à jour : **2026-07-01** (v3.9 — Fusion : outil d'export legacy + Module 00 (référentiels) + migration 015, voir §28)
+
+> ⚠️ **Projet de fusion en cours** : ce projet doit absorber `C:\AI-Businesses\Fiche Inscription Teacher Khati\` (dashboard HTML/localStorage qui gère en double une partie du périmètre élèves/tarification/paiements). Voir l'audit complet : [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) et §28 ci-dessous avant toute implémentation touchant Élèves, Finances, Présences ou Inscription publique.
 
 ---
 
@@ -36,7 +38,7 @@ Automatiser la génération de résumés de cours professionnels envoyés aux pa
 ```
 NEXT_PUBLIC_SUPABASE_URL         ✅ Production
 NEXT_PUBLIC_SUPABASE_ANON_KEY    ✅ Production
-SUPABASE_SERVICE_ROLE_KEY        ✅ Production  ⚠️ À régénérer (voir §11)
+SUPABASE_SERVICE_ROLE_KEY        ✅ Production  ⚠️ Statut à vérifier (voir §11 et §27 — incohérence documentaire détectée le 2026-07-01)
 OPENAI_API_KEY                   ✅ Production
 PADLET_API_TOKEN                 ✅ Production
 ```
@@ -45,7 +47,7 @@ PADLET_API_TOKEN                 ✅ Production
 ✅ Code poussé sur GitHub (main) — branche protégée, PR merge  
 ✅ Migrations 001–014 toutes appliquées dans Supabase  
 ✅ Application déployée sur Vercel  
-- [ ] Régénérer `SUPABASE_SERVICE_ROLE_KEY` dans Supabase → Settings → API → Reset (ancienne clé exposée dans historique git)
+- [ ] **À vérifier (pas à refaire aveuglément)** : §27 (Session 14) indique que la clé a déjà été migrée vers le nouveau format `sb_secret_...` avec `env.ts` mis à jour pour l'accepter — cette checkbox n'a probablement jamais été cochée après coup. Confirmer dans Supabase Dashboard → Settings → API la date de création de la clé active avant de relancer une régénération.
 
 ---
 
@@ -122,8 +124,9 @@ Teacher Khati
 | `012_pinterest_integration.sql` | Table pinterest_settings, RLS | ✅ Appliquée |
 | `013_invoice_reminder_tracking.sql` | Colonne `invoices.reminder_sent_at` | ✅ Appliquée |
 | `014_user_tools.sql` | Table user_tools (outils dynamiques : n8n, Make, Airtable…) | ✅ Appliquée |
+| `015_registration_prefix.sql` | Colonne `sites.registration_prefix` (préfixe N° d'inscription, fusion) | ⏳ À appliquer |
 
-> ✅ Toutes les migrations 001–014 appliquées. Toutes les fonctionnalités sont opérationnelles.
+> ✅ Migrations 001–014 appliquées. **015 écrite, à appliquer** avant le `--commit` du Module 00 de fusion (§28).
 
 ### Schéma migration 009 (résumé)
 ```
@@ -907,3 +910,54 @@ Chaîne de corrections nécessaires pour que `/presences` fonctionne de bout en 
 → GET /api/attendance?sessionId → élèves chargés depuis enrollments
 → Marquer présences → POST /api/attendance (upsert)
 ```
+
+---
+
+## 28. FUSION AVEC FICHE INSCRIPTION TEACHER KHATI
+
+### Contexte
+`C:\AI-Businesses\Fiche Inscription Teacher Khati\` est un second projet (dashboard HTML/JS monolithique, 11 957 lignes, persistance `localStorage` uniquement, sans backend) qui gère **en double** une partie du périmètre déjà couvert ici : inscriptions familles/élèves, tarification dégressive + par lieu + par famille, paiements, présences. Audit comparatif complet réalisé le 2026-06-30, corrigé le 2026-07-01 :
+
+📄 **[`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md)**
+
+### Verdict de l'audit
+RTK (ce projet) doit devenir la source de vérité unique — vraie base de données avec RLS, multi-poste, sauvegarde native, déjà en production stable. Fiche Inscription sera démantelé après migration de ses données, en récupérant d'abord ce qui y est objectivement meilleur (notamment l'UX de l'appel de présence groupé, à confirmer par comparaison directe — voir §4 de l'audit).
+
+### Risques notables à traiter avant ou pendant la fusion
+- Mot de passe `12345678` en clair côté Fiche Inscription (pas un risque pour RTK, mais à garder en tête tant que ce système reste utilisé en parallèle).
+- Aucune sauvegarde des données Fiche Inscription — risque de perte avant migration.
+- Le formulaire public `formulaire_en_ligne.html` de Fiche Inscription ne synchronise pas réellement avec son propre dashboard (architecture localStorage→localStorage cassée dès que parent et école ne sont pas sur le même poste) — RTK a déjà l'équivalent fonctionnel et sécurisé (`/inscription`).
+- Statut réel de `SUPABASE_SERVICE_ROLE_KEY` à confirmer (voir §2 et §11 — incohérence documentaire entre la checklist non cochée et les notes de Session 14).
+
+### Méthodologie obligatoire pour ce chantier (consigne du 2026-07-01)
+Aucune implémentation ne démarre sur simple lecture rapide. Pour chaque module concerné (Inscriptions, Tarification, Finances/Paiements, Présences, Inscription publique) :
+1. Relire le code réel des deux côtés (pas seulement la documentation, qui peut être obsolète — voir l'exemple de la clé Supabase ci-dessus).
+2. Comparer fonctionnalité par fonctionnalité, en notant explicitement ce qui est supérieur de chaque côté.
+3. Proposer une solution réfléchie qui ne perd aucune fonctionnalité utile, pas la première solution venue.
+4. Validation explicite par l'utilisateur avant toute écriture de code.
+5. Mettre à jour `AUDIT_FUSION_TEACHER_KHATI.md` et cette section à chaque étape franchie.
+
+### Découpage modulaire (2026-07-01)
+La migration est découpée en modules indépendants (un script par module, idempotent, erreur isolée au niveau enregistrement ET au niveau module). Détail complet, tableau de correspondance noms/variables vérifié sur le code réel, et conflits structurels identifiés : voir §8 de [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md).
+
+Modules : `00-referentiels` → `01-familles-eleves` → (`02-tarification` + `03-inscriptions-groupes`) → `04-finances` → `05-presences` (isolé, après revue dédiée).
+
+Deux conflits structurels réels identifiés (pas de simples renommages) :
+- **Module 03** : Fiche Inscription n'a pas de notion de "groupe" (jour/horaire embarqués sur l'enfant) — RTK organise tout autour de `groups`/`schedules`. Nécessite une stratégie de matching/création.
+- **Module 05** : Fiche Inscription n'a pas de notion de "séance" — RTK exige des `sessions` réelles avant d'y rattacher des présences. Backfill potentiellement lourd.
+
+### Décisions produit validées (2026-07-01)
+- **Module 03** (groupes) : création automatique des groupes/créneaux manquants, avec rapport dry-run listant chaque création pour relecture a posteriori.
+- **Module 05** (présences) : pas de backfill historique — RTK démarre à blanc à la date de bascule.
+- **Numéro d'inscription** : porté dans RTK (nouvelle colonne + logique de génération séquentielle par site à implémenter).
+
+### Statut
+🔵 **PIVOT (2026-07-02) — aucune donnée réelle à migrer, chantier requalifié.**
+- L'audit qualité des données a révélé, et l'utilisateur a confirmé : **toutes les inscriptions de Fiche Inscription sont fictives** (`source:"test"`, emails/téléphones factices). Les données RTK en base sont aussi des essais de développement.
+- **Modules 01-05 de migration : sans objet.** L'outillage (`scripts/migration/`) reste en réserve ; dump de test conservé sous `dumps/DONNEES-DE-TEST-ne-pas-migrer.json`.
+- **Nouveau périmètre de la fusion :**
+  1. Porter les fonctionnalités supérieures du legacy : N° d'inscription séquentiel par site (migration 015 écrite, génération à implémenter), appel du jour groupé, tarification proratisée (à vérifier).
+  2. Préparer la rentrée 2026-2027 : année scolaire, groupes/créneaux, inscription publique `/inscription` + QR.
+  3. Purger les données de test RTK juste avant la rentrée.
+  4. Archiver Fiche Inscription (aucune saisie réelle n'y a jamais eu lieu).
+- Détail : §11 « Journal d'exécution » de [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md).

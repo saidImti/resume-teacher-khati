@@ -1,0 +1,8 @@
+{
+  "_comment": "Alias de réconciliation des lieux legacy (Fiche Inscription) vers les sites canoniques RTK. Clé = matchKey du lieu legacy (minuscules, sans accents ni séparateurs). Valeur = slug du site RTK cible. Décisions utilisateur du 2026-07-02.",
+  "_aliases": {
+    "champignysurmarnetaxiphone": "champigny-taxi-phone",
+    "cestmonmienmaisonalfort": "maison-alfort",
+    "cestmonmien": "maison-alfort"
+  }
+}

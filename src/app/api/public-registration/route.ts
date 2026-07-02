@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { verifyRegistrationToken } from '@/lib/registration-token'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
+import { formatRegistrationNumber } from '@/lib/utils'
 import type { Family, PricingRule } from '@/types'
 
 const PublicRegistrationSchema = z.object({
@@ -164,9 +165,14 @@ export async function POST(request: Request) {
       ? `Tarif indicatif du site : ${normalAmount.toFixed(2)} €/mois.`
       : 'Tarif à confirmer par Teacher Khati.'
 
+  const registrationNumber = familyRecord?.registration_number
+    ? formatRegistrationNumber(familyRecord.registration_number)
+    : null
+
   const parentMessage = [
     'Bonjour,',
     `Nous avons bien reçu l'inscription de ${student.first_name} ${student.last_name}.`,
+    registrationNumber ? `N° d'inscription : ${registrationNumber}.` : null,
     `Site demandé : ${site.name}.`,
     level ? `Niveau : ${level.emoji ?? ''} ${level.name}.` : null,
     tariffText,
@@ -176,6 +182,7 @@ export async function POST(request: Request) {
   const adminMessage = [
     'Nouvelle inscription reçue',
     `Élève : ${student.first_name} ${student.last_name}`,
+    registrationNumber ? `N° d'inscription : ${registrationNumber}` : null,
     `Parent : ${family.parent1_first} ${family.parent1_last}`,
     `Téléphone : ${normalizedPhone}`,
     normalizedEmail ? `Email : ${normalizedEmail}` : null,
