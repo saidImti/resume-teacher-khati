@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Format non supporté — PNG, JPG ou WebP uniquement' }, { status: 400 })
   }
   if (file.size > MAX_BRANDING_FILE_SIZE) {
-    return NextResponse.json({ error: 'Fichier trop volumineux (2 Mo maximum)' }, { status: 400 })
+    return NextResponse.json({ error: 'Fichier trop volumineux (4 Mo maximum)' }, { status: 400 })
   }
 
   const admin = createAdminSupabaseClient()

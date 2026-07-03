@@ -438,3 +438,15 @@ Demande mémorisée depuis le 2026-07-03 (voir mémoire persistante `demande-sig
 **Vérifié en navigateur réel** (compte jetable, PNG de test 1×1 généré en base64 côté navigateur) : upload logo → `POST /api/branding/logo` 200, URL signée résolue, **visible immédiatement** sur Sidebar (`img[alt="Logo"]` confirmé) et sur une vraie facture existante (cercle « K » disparu). Signataire « Teacher Khati » créé avec signature → label exact **« TEACHER KHATI »** (pas le générique) et image correctement branchée sur le bloc Enseignant(e) de la fiche de présence (props React confirmées : `signatureUrl` = URL signée pointant vers le bon chemin storage), bloc Direction resté vide en fallback (aucun 2ᵉ signataire créé) comme attendu. `tsc` 0 erreur, build prod OK (`/settings/marque` 4.42 kB).
 
 **🚀 Déployé en production (2026-07-04)** : PR #11 mergée (`main` @ `822299e`), Vercel `success`.
+
+### 2026-07-04 (suite) — Bug critique corrigé : limite de taille trop stricte bloquait le vrai fichier
+
+Retour utilisateur : « la signature n'est pas utilisée » après tentative d'upload. Vérification directe en base (`users.logo_url = null`, table `signatories` vide) : **rien n'avait été enregistré côté serveur** — pas un problème d'affichage, l'upload échouait réellement.
+
+**Cause exacte trouvée** : `Signature Teacher Khati.png` fait **2 109 533 octets (2,012 Mo)**, contre une limite `MAX_BRANDING_FILE_SIZE` fixée à **2 097 152 octets (2,000 Mo) pile** — dépassement de seulement **12 381 octets**. Un vrai scan de signature dépasse facilement 2 Mo ; la limite était trop stricte pour un usage réel.
+
+**Fix** : `MAX_BRANDING_FILE_SIZE` porté à 4 Mo (confortable pour un scan réel, reste sous la limite de charge utile des fonctions serverless Vercel ~4,5 Mo). Textes UI et messages d'erreur des 3 routes (`branding/logo`, `signatories`, `signatories/[id]`) mis à jour en cohérence (« 4 Mo maximum »).
+
+**Vérifié en navigateur réel** avec un fichier de test généré à la **taille exacte du vrai fichier bloqué** (2 109 533 octets) : `POST /api/branding/logo → 200 OK` (échouait avant le fix), URL signée résolue, logo affiché. `tsc` 0 erreur, build prod OK.
+
+**🚀 Déployé en production (2026-07-04)** : PR #13 mergée.
