@@ -420,3 +420,5 @@ Retour utilisateur après vérification personnelle du PDF : (1) le Dashboard (s
 - Dimensions du document : `1122×793px` = exactement `297×210mm` (paysage) ✅.
 - Sauts de page par groupe : groupe 1 (Kids, 5 élèves) sans saut, groupe 2 (Juniors, 11 élèves) avec `group-break` ✅ — chacun sur sa propre page.
 - `tsc` 0 erreur (après purge du cache `.next` obsolète référençant les anciens chemins), build prod OK (`/presences/rapport/print` 4.1 kB, `/finances/invoice/[id]/print` 2.92 kB).
+
+**🚀 Déployé en production (2026-07-03)** : PR #9 mergée (`main` @ `f5233db`), Vercel `success`.
