@@ -47,9 +47,10 @@ type InvoiceWithRelations = Omit<Invoice, 'family' | 'site' | 'payments'> & {
 
 interface Props {
   invoice: InvoiceWithRelations
+  logoUrl?: string | null
 }
 
-export function PrintInvoiceClient({ invoice }: Props) {
+export function PrintInvoiceClient({ invoice, logoUrl }: Props) {
   const family   = invoice.family ?? null
   const site     = invoice.site ?? null
   const payments = invoice.payments ?? []
@@ -122,8 +123,13 @@ export function PrintInvoiceClient({ invoice }: Props) {
         <div className="flex items-start justify-between mb-10">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center">
-                <span className="text-white font-bold text-base">K</span>
+              <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center overflow-hidden">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-0.5" />
+                ) : (
+                  <span className="text-white font-bold text-base">K</span>
+                )}
               </div>
               <div>
                 <div className="text-lg font-bold text-gray-900 leading-tight">Teacher Khati</div>

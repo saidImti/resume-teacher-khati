@@ -43,6 +43,7 @@ const NAV_BOTTOM = [
 interface SidebarProps {
   userName?: string
   userEmail?: string
+  logoUrl?: string | null
 }
 
 function NavItem({ item, pathname, sidebarOpen }: {
@@ -91,7 +92,7 @@ function NavItem({ item, pathname, sidebarOpen }: {
   )
 }
 
-export function Sidebar({ userName, userEmail }: SidebarProps) {
+export function Sidebar({ userName, userEmail, logoUrl }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { sidebarOpen, toggleSidebar } = useUIStore()
@@ -129,8 +130,13 @@ export function Sidebar({ userName, userEmail }: SidebarProps) {
         <div className="flex items-center justify-between h-14 px-3 border-b border-border shrink-0">
           {sidebarOpen && (
             <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-base shrink-0">
-                📚
+              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-base shrink-0 overflow-hidden">
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-0.5" />
+                ) : (
+                  '📚'
+                )}
               </div>
               <span className="font-semibold text-sm text-foreground leading-tight truncate">
                 Teacher Khati

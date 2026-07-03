@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { buildAttendanceReport } from '@/lib/attendance-report'
+import { getLogoUrl, getSignatories } from '@/lib/branding'
 import { PrintAttendanceClient } from '@/components/presences/PrintAttendanceClient'
 
 interface PageProps {
@@ -19,10 +20,12 @@ export default async function PrintAttendancePage({ searchParams }: PageProps) {
   }
 
   const admin = createAdminSupabaseClient()
-  const [report, { data: site }, { data: group }] = await Promise.all([
+  const [report, { data: site }, { data: group }, logoUrl, signatories] = await Promise.all([
     buildAttendanceReport(admin, { userId: user.id, from, to, siteId, groupId }),
     siteId ? admin.from('sites').select('name').eq('id', siteId).single() : Promise.resolve({ data: null }),
     groupId ? admin.from('groups').select('name, level:levels(emoji)').eq('id', groupId).single() : Promise.resolve({ data: null }),
+    getLogoUrl(admin, user.id).catch(() => null),
+    getSignatories(admin, user.id).catch(() => []),
   ])
 
   return (
@@ -30,6 +33,8 @@ export default async function PrintAttendancePage({ searchParams }: PageProps) {
       report={report}
       siteName={(site as { name: string } | null)?.name ?? null}
       groupName={(group as { name: string } | null)?.name ?? null}
+      logoUrl={logoUrl}
+      signatories={signatories}
     />
   )
 }
