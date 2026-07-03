@@ -72,12 +72,12 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
   return (
     <>
       <style>{`
-        @page { size: A4; margin: 14mm 14mm 20mm 14mm; }
+        @page { size: A4 landscape; margin: 12mm 14mm 18mm 14mm; }
         @media print {
           .no-print { display: none !important; }
           html, body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; }
           .doc { box-shadow: none !important; margin: 0 !important; width: auto; min-height: 0; padding: 0 !important; }
-          .site-break { break-before: page; }
+          .group-break { break-before: page; }
           .group-block { break-inside: avoid; }
           .print-footer { position: fixed; bottom: 0; left: 0; right: 0; }
           thead { display: table-header-group; }
@@ -116,8 +116,8 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
 
       <div className="no-print mt-14" />
 
-      {/* ── Document ── */}
-      <div className="doc mx-auto bg-white shadow-lg" style={{ width: '210mm', minHeight: '297mm', padding: '0' }}>
+      {/* ── Document (A4 Paysage) ── */}
+      <div className="doc mx-auto bg-white shadow-lg" style={{ width: '297mm', minHeight: '210mm', padding: '0' }}>
 
         {/* ── MASTHEAD ── */}
         <header className="pb-4" style={{ borderBottom: '3px solid #4338ca' }}>
@@ -181,16 +181,24 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
           <p className="py-16 text-center text-sm text-gray-500">Aucun appel enregistré sur cette période.</p>
         )}
 
-        {sections.map((siteSection, siteIndex) => (
-          <div key={siteSection.site} className={siteIndex > 0 ? 'site-break' : undefined}>
-            {sections.length > 1 && (
-              <div className="mb-2 mt-2 text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">
-                {siteSection.site}
-              </div>
-            )}
+        {(() => {
+          // Une page par groupe (répartition demandée) : compteur global à
+          // travers les sites, pour ne sauter de page qu'entre deux groupes
+          // — jamais avant le tout premier groupe du document.
+          let globalGroupIndex = -1
+          return sections.map((siteSection) => (
+            <div key={siteSection.site}>
+              {sections.length > 1 && (
+                <div className="mb-2 mt-2 text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">
+                  {siteSection.site}
+                </div>
+              )}
 
-            {siteSection.groups.map(({ group, rows, totals, rate }) => (
-              <div key={group?.id ?? 'sans-groupe'} className="group-block mb-5">
+              {siteSection.groups.map(({ group, rows, totals, rate }) => {
+                globalGroupIndex += 1
+                const pageBreakClass = globalGroupIndex > 0 ? 'group-break' : undefined
+                return (
+              <div key={group?.id ?? 'sans-groupe'} className={`group-block mb-5 ${pageBreakClass ?? ''}`}>
                 {/* Bandeau de groupe */}
                 <div
                   className="flex items-center justify-between rounded-t-lg px-3 py-1.5"
@@ -254,9 +262,11 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
                   </tfoot>
                 </table>
               </div>
-            ))}
-          </div>
-        ))}
+                )
+              })}
+            </div>
+          ))
+        })()}
 
         {/* ── TOTAL GÉNÉRAL (si plusieurs sections) ── */}
         {sections.length > 1 && (

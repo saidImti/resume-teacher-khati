@@ -401,3 +401,22 @@ Retour utilisateur : l'appel par groupe est jugé très réussi, mais la fiche d
 - `tsc` 0 erreur, build prod OK (`/presences` 12.8 kB, `/presences/rapport/print` 4.07 kB).
 
 **🚀 Déployé en production (2026-07-03)** : PR #7 mergée (`main` @ `e2a233a`), Vercel `success`.
+
+### 2026-07-03 (suite) — Fix critiques : sidebar imprimée, A4 Paysage, une page par groupe
+
+Retour utilisateur après vérification personnelle du PDF : (1) le Dashboard (sidebar/nav) s'imprimait aussi alors qu'il ne voulait que la fiche, (2) chaque groupe doit avoir sa propre page, (3) format A4 Paysage souhaité pour tout voir. Note séparée conservée en mémoire (pas encore construite) : espace Paramètres pour uploader signature + logo, à apposer automatiquement sur les documents.
+
+**Cause racine du bug sidebar (confirmée par lecture du code) :** `src/app/(app)/layout.tsx` enveloppe **toutes** les routes du groupe `(app)` — y compris nos pages d'impression — avec `AppShell` (Sidebar + Header). La `Sidebar` n'avait aucune règle `@media print` pour se masquer. Comme les pages d'impression `/presences/rapport/print` et `/finances/invoice/[id]/print` vivaient toutes les deux sous `(app)/`, ce bug touchait **les deux**, pas seulement les présences (l'utilisateur n'avait juste pas encore remarqué sur les factures).
+
+**Fix appliqué :**
+- **Déplacement des deux pages d'impression hors du groupe `(app)`** (`git mv`, historique préservé) : `(app)/presences/rapport/print` → `presences/rapport/print`, `(app)/finances/invoice/[id]/print` → `finances/invoice/[id]/print`. Les groupes de route entre parenthèses sont invisibles dans l'URL — **aucun lien cassé**, mêmes URLs exactes. Ces pages n'héritent plus que du layout racine (aucune Sidebar, aucun Header) : c'est l'architecture correcte pour des pages conçues pour être imprimées.
+- **PDF présence en A4 Paysage** : `@page { size: A4 landscape }`, largeur du document 297mm.
+- **Une page par groupe** : remplacement de la logique « saut de page entre sites » par un compteur global à travers tous les groupes — chaque groupe démarre sur une nouvelle page (sauf le tout premier), quel que soit le site.
+- Bug additionnel corrigé au passage : référence de document tronquée de façon illisible (héritage du fix précédent, `.slice(0,24)` coupait la date de fin — déjà signalé mais recorrigé proprement ici).
+
+**Vérifié en navigateur réel** (piège méthodologique rencontré et documenté : une première lecture différée après navigation faisait croire à un bug de sidebar fantôme — en réalité un artefact de mon enchaînement de tests same-tab, pas un vrai bug ; revérifié avec lecture immédiate + relecture à +4s, stable, confirmé absent) :
+- `/presences/rapport/print` : aucune trace de Sidebar, ni immédiatement ni après 4s.
+- `/finances/invoice/[id]/print` (facture existante réelle) : aucune trace de Sidebar non plus — confirme que le fix couvre bien les deux documents.
+- Dimensions du document : `1122×793px` = exactement `297×210mm` (paysage) ✅.
+- Sauts de page par groupe : groupe 1 (Kids, 5 élèves) sans saut, groupe 2 (Juniors, 11 élèves) avec `group-break` ✅ — chacun sur sa propre page.
+- `tsc` 0 erreur (après purge du cache `.next` obsolète référençant les anciens chemins), build prod OK (`/presences/rapport/print` 4.1 kB, `/finances/invoice/[id]/print` 2.92 kB).
