@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { ClipboardCheck, BookOpenCheck } from 'lucide-react'
+import { ClipboardCheck, BookOpenCheck, CalendarClock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { AttendanceClient } from './AttendanceClient'
 import { AttendanceRegister } from './AttendanceRegister'
+import { DailyCall } from './DailyCall'
 import type { Site } from '@/types'
 
 interface GroupOption {
@@ -20,12 +21,13 @@ interface Props {
 }
 
 const TABS = [
-  { key: 'appel' as const,    label: "Faire l'appel",       icon: ClipboardCheck },
+  { key: 'jour' as const,     label: 'Appel du jour',       icon: CalendarClock  },
+  { key: 'appel' as const,    label: 'Par groupe',          icon: ClipboardCheck },
   { key: 'registre' as const, label: 'Fiche de présence',   icon: BookOpenCheck  },
 ]
 
 export function PresencesTabs({ groups, sites }: Props) {
-  const [tab, setTab] = useState<'appel' | 'registre'>('appel')
+  const [tab, setTab] = useState<'jour' | 'appel' | 'registre'>('jour')
 
   return (
     <div className="space-y-6">
@@ -49,9 +51,9 @@ export function PresencesTabs({ groups, sites }: Props) {
         ))}
       </div>
 
-      {tab === 'appel'
-        ? <AttendanceClient groups={groups} sites={sites} />
-        : <AttendanceRegister groups={groups} sites={sites} />}
+      {tab === 'jour' && <DailyCall />}
+      {tab === 'appel' && <AttendanceClient groups={groups} sites={sites} />}
+      {tab === 'registre' && <AttendanceRegister groups={groups} sites={sites} />}
     </div>
   )
 }
