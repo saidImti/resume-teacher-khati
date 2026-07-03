@@ -399,3 +399,5 @@ Retour utilisateur : l'appel par groupe est jugé très réussi, mais la fiche d
 - **PDF multi-sites vérifié avec 2 groupes sur 2 sites différents** : sections "Champigny Taxi Phone" (5 élèves, 80%) et "Maison-Alfort" (11 élèves, 82%) correctement séparées, **Total général exact** (16 élèves, 30P/1R/0E/7A = 82% — les sous-totaux s'additionnent parfaitement).
 - Couleurs vérifiées via `preview_inspect` (barre indigo `#4338ca` sous le masthead, bordures de tableau).
 - `tsc` 0 erreur, build prod OK (`/presences` 12.8 kB, `/presences/rapport/print` 4.07 kB).
+
+**🚀 Déployé en production (2026-07-03)** : PR #7 mergée (`main` @ `e2a233a`), Vercel `success`.
