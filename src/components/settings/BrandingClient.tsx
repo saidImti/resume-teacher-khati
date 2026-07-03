@@ -191,7 +191,7 @@ export function BrandingClient({ initialLogoUrl, initialSignatories }: Props) {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = '' }}
             />
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">PNG, JPG ou WebP · 2 Mo maximum · fond transparent recommandé.</p>
+          <p className="mt-3 text-xs text-muted-foreground">PNG, JPG ou WebP · 4 Mo maximum · fond transparent recommandé.</p>
         </section>
       </FadeIn>
 

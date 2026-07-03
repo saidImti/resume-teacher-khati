@@ -61,7 +61,9 @@ export function storagePathForSignature(userId: string, signatoryId: string, ext
 }
 
 export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
-export const MAX_BRANDING_FILE_SIZE = 2 * 1024 * 1024 // 2 Mo
+// 4 Mo — confortable pour un vrai scan de signature/logo, tout en restant
+// sous la limite de charge utile des fonctions serverless Vercel (~4,5 Mo).
+export const MAX_BRANDING_FILE_SIZE = 4 * 1024 * 1024
 
 export function extFromMimeType(mime: string): string {
   if (mime === 'image/png') return 'png'
