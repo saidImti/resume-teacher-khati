@@ -339,3 +339,37 @@ L'utilisateur confirme : **il n'existe aucune vraie famille, nulle part**. Toute
 **Vérifié en navigateur réel (compte jetable, supprimé après)** : cycle complet appel → sauvegarde → panneau « Appels enregistrés » (« Juniors · Maison-Alfort — 10 présents · 1 absent ») → profil de l'élève absente (« 0 % d'assiduité · Absent 1 · 0/1 cours suivis ») ✅. Débordement : scrollWidth 1360 ≤ viewport 1366, et 375px mobile sans scroll horizontal ✅. Seules erreurs console : warnings dnd-kit préexistants du dashboard (hors périmètre). `tsc` 0 erreur, build prod OK.
 
 **🚀 Déployé en production (2026-07-02)** : PR #3 mergée (`main` @ `d9596e5`), check Vercel `success`. Le lot inclut aussi la section Mode Test (qui n'avait pas encore été déployée). `.claude/` ajouté au `.gitignore` (config locale). Réponse à la question « où retrouver un appel dans 12 mois » : table `attendance` (permanente) ; consultation via (1) fiche élève → section Présences (historique complet sans limite), (2) /presences → panneau Appels enregistrés (14 jours), (3) /presences → groupe + date passée quelconque.
+
+### 2026-07-02 (suite) — Fiche de présence par période (équivalent du sélecteur T1/T2/T3 du legacy)
+
+Fonctionnalité portée depuis Fiche Inscription (« Sélecteur de période : T1 · T2 · T3 · Personnalisée · Année complète ») en version RTK :
+
+- **Nouvel onglet « Fiche de présence »** sur `/presences` (`PresencesTabs` : Faire l'appel | Fiche de présence).
+- **Présets** : Ce mois · Trimestre 1 (sept-déc) · T2 (janv-mars) · T3 (avril-juin) · Année scolaire (sept→août) · Personnalisée (dates libres). Filtres site + groupe + recherche élève.
+- **Synthèse de période** : 5 tuiles (élèves suivis/présents/retards/excusés/absents) + assiduité globale adaptative.
+- **Registre par élève** : 4 compteurs en pastilles, barre + taux d'assiduité, ligne dépliable montrant **chaque séance datée** avec statut et note.
+- **Export CSV** (`fiche-presence-<du>_<au>.csv`, BOM UTF-8, `;`).
+- **API `GET /api/attendance/report`** — agrégation par élève sur plage de dates. **Bug RLS attrapé en vérification** : le client utilisateur vidait le join `sessions!inner` (RLS `has_site_access` sur sessions/groups/sites — piège documenté MASTER §27) → passage au client admin avec filtre `user_id` explicite sur `attendance`.
+- **Vérifié en navigateur réel** (2 séances semées à des dates différentes) : Ce mois = 11 appels, T3 = 11, Année = 22 cumulés — agrégats exacts ; détail déplié date par date OK. `tsc` 0 erreur, build OK.
+- **🚀 Déployé** : PR #4 mergée (`main` @ `0f24a9d`), Vercel `success`.
+
+**Reste connu côté présences (grandes écoles)** : impression PDF officielle de la fiche (le CSV existe ; modèle A4 façon factures à faire), et l'appel du jour groupé multi-groupes du legacy (§4) toujours à comparer/porter.
+
+### 2026-07-03 — PDF de la fiche + Appel du jour groupé (portage complet du §4 de l'audit)
+
+Les deux items restants de la session précédente, traités dans l'ordre demandé.
+
+**1. PDF imprimable de la fiche de présence**
+- `src/lib/attendance-report.ts` — agrégation extraite de la route API en lib partagée (évite la duplication entre l'API JSON et la page d'impression).
+- `src/app/(app)/presences/rapport/print/page.tsx` + `PrintAttendanceClient.tsx` — même pattern que `/finances/invoice/[id]/print` (page A4, `@media print`, toolbar `no-print`, `window.print()`, `window.close()`) : en-tête Teacher Khati, 6 tuiles de synthèse, tableau nominatif (présent/retard/excusé/absent/total/assiduité), ligne de signature.
+- Bouton « Imprimer / PDF » dans l'onglet Fiche de présence, ouvre `/presences/rapport/print?from=&to=&siteId=&groupId=` dans un nouvel onglet (mêmes filtres que la vue).
+- **Vérifié en navigateur réel** : PDF généré sur l'année scolaire complète, données identiques à la vue (11 élèves, 10 présents, 1 absent) ✅.
+
+**2. Appel du jour groupé** (le morceau UX du legacy resté non tranché depuis §4)
+- **API `POST /api/attendance/day`** : reçoit une date, calcule le jour de semaine, récupère **tous les créneaux actifs de ce jour** (`schedules.day_of_week`), déduplique par groupe, trouve/crée les sessions du jour, charge les élèves inscrits + présences déjà marquées. Un seul appel réseau pour toute la journée.
+- **`DailyCall.tsx`** : navigation jour précédent/suivant + sélecteur de date, compteurs globaux (attendus/présents/absents), **groupé par site** puis par créneau (reproduit l'UX legacy lieu→créneau→niveau), carte par groupe avec « Tous présents » et grille d'élèves cliquables (cycle présent→absent→retard→excusé), **un seul bouton « Enregistrer l'appel du jour »** qui sauvegarde tous les groupes modifiés en parallèle (`Promise.all`), état « Enregistré ✓ » par groupe.
+- **Nouvel onglet par défaut** sur `/presences` : Appel du jour (nouveau, actif par défaut) · Par groupe (l'ancien `AttendanceClient`, renommé) · Fiche de présence.
+- **Vérifié en navigateur réel** : mercredi 1er juillet → 16 groupes groupés par site, 165 élèves attendus. « Tous présents » sur un groupe de 11 → `11/0/11`. 1 élève basculé absent → `10/1/11`, sauvegarde, **persistance confirmée après rechargement complet de la page**. PDF généré ensuite sur cette même donnée : cohérent.
+- `tsc` 0 erreur, build prod OK (`/presences` 11.7 kB, `/presences/rapport/print` 2.33 kB).
+
+**Le §4 de l'audit est maintenant clos** : l'appel du jour groupé de Fiche Inscription est porté dans RTK, avec en plus 4 états (vs 2), notification WhatsApp, historique par élève et fiche de présence par période — supérieur au legacy sur tous les axes identifiés dans la comparaison initiale.

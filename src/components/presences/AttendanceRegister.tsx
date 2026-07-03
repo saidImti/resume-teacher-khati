@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   CalendarRange, CheckCircle2, ChevronDown, Clock, Download,
-  Info, Loader2, Search, Users, XCircle,
+  Info, Loader2, Printer, Search, Users, XCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FadeIn } from '@/components/ui/FadeIn'
@@ -172,15 +172,31 @@ export function AttendanceRegister({ groups, sites }: Props) {
               <CalendarRange className="h-4 w-4" />
               Période de la fiche
             </h2>
-            <button
-              type="button"
-              onClick={exportCsv}
-              disabled={!report || visibleRows.length === 0}
-              className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:opacity-40"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export CSV
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={!report || visibleRows.length === 0}
+                className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams({ from, to })
+                  if (siteFilter) params.set('siteId', siteFilter)
+                  if (groupFilter) params.set('groupId', groupFilter)
+                  window.open(`/presences/rapport/print?${params}`, '_blank')
+                }}
+                disabled={!report || visibleRows.length === 0}
+                className="btn-press inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Imprimer / PDF
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2">

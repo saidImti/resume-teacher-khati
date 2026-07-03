@@ -30,7 +30,7 @@ export default async function PresencesPage() {
     <div className="flex flex-col flex-1 overflow-hidden">
       <Header
         title="Présences"
-        subtitle="Faire l'appel · Fiche de présence mensuelle, trimestrielle, annuelle"
+        subtitle="Appel du jour groupé · Fiche de présence mensuelle, trimestrielle, annuelle"
       />
       <div className="flex-1 overflow-y-auto p-6">
         <PresencesTabs
