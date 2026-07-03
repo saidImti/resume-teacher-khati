@@ -375,3 +375,27 @@ Les deux items restants de la session précédente, traités dans l'ordre demand
 **Le §4 de l'audit est maintenant clos** : l'appel du jour groupé de Fiche Inscription est porté dans RTK, avec en plus 4 états (vs 2), notification WhatsApp, historique par élève et fiche de présence par période — supérieur au legacy sur tous les axes identifiés dans la comparaison initiale.
 
 **🚀 Déployé en production (2026-07-03)** : PR #5 mergée (`main` @ `ca5b0f5`), Vercel `success`. Module Présences maintenant complet : Appel du jour groupé (par défaut) · Par groupe · Fiche de présence (période + export CSV + PDF A4).
+
+### 2026-07-03 (suite) — Refonte Fiche de présence (écran) + PDF en vrai registre officiel
+
+Retour utilisateur : l'appel par groupe est jugé très réussi, mais la fiche de présence manquait de structure et le PDF n'était « pas satisfaisant visuellement ». Refonte des deux :
+
+**Écran (`AttendanceRegister.tsx`)** — passage d'une liste plate de tous les élèves mélangés à une **structure hiérarchique site → groupe → élèves** (même vocabulaire que `DailyCall`) :
+- Bandeau de groupe avec barre latérale colorée (couleur du niveau), sous-total du groupe (4 compteurs + taux), repliable/dépliable.
+- **Tri A→Z ou par assiduité croissante** (nouveau) — repère en un coup d'œil les élèves à surveiller.
+
+**PDF (`PrintAttendanceClient.tsx`) — reconstruction complète en registre officiel** :
+- Masthead premium : logo indigo, nom en police manuscrite (cohérent avec l'identité de marque déjà utilisée ailleurs dans l'app), référence de document lisible (`RP-<du>-<au>`), date/heure d'édition, bandeau période + périmètre.
+- Ruban de synthèse à 6 cellules avec assiduité globale mise en valeur.
+- **Légende P/R/E/A** explicite (convention de registre scolaire classique).
+- **Sections par site → groupe**, chaque groupe = un `<table>` avec son propre `<thead>` (répétition native du navigateur à chaque saut de page), bandeau de groupe coloré, **ligne de sous-total** par groupe.
+- **Saut de page entre sites** (`break-before: page`) si plusieurs sites dans le périmètre, bande « Total général » si plusieurs sections.
+- Bloc signatures à deux colonnes (Enseignant / Direction + emplacement Cachet), pied de page répété sur chaque page imprimée (`position: fixed`, visible par page en impression Chromium).
+- Bug attrapé en vérification : référence de document tronquée de façon illisible (`.slice(0,24)` coupait la date de fin) — corrigé.
+
+**Vérifié en navigateur réel** (2 comptes jetables successifs, données ré-ensemencées à chaque fois car `attendance` cascade à la suppression de l'utilisateur) :
+- Regroupement écran confirmé : bandeau "MAISON-ALFORT" → groupe "Juniors" → sous-total exact (26P/1R/0E/6A = 82%).
+- Tri par assiduité confirmé : les cas à 0%/33%/67% remontent en tête.
+- **PDF multi-sites vérifié avec 2 groupes sur 2 sites différents** : sections "Champigny Taxi Phone" (5 élèves, 80%) et "Maison-Alfort" (11 élèves, 82%) correctement séparées, **Total général exact** (16 élèves, 30P/1R/0E/7A = 82% — les sous-totaux s'additionnent parfaitement).
+- Couleurs vérifiées via `preview_inspect` (barre indigo `#4338ca` sous le masthead, bordures de tableau).
+- `tsc` 0 erreur, build prod OK (`/presences` 12.8 kB, `/presences/rapport/print` 4.07 kB).
