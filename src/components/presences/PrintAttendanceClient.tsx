@@ -2,11 +2,14 @@
 
 import { useMemo } from 'react'
 import type { AttendanceReport, AttendanceReportRow } from '@/lib/attendance-report'
+import type { Signatory } from '@/lib/branding'
 
 interface Props {
   report: AttendanceReport
   siteName: string | null
   groupName: string | null
+  logoUrl?: string | null
+  signatories?: Signatory[]
 }
 
 function fmtDate(iso: string) {
@@ -25,7 +28,9 @@ function docReference(from: string, to: string) {
   return `RP-${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`
 }
 
-export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
+export function PrintAttendanceClient({ report, siteName, groupName, logoUrl, signatories = [] }: Props) {
+  const teacherSignatory = signatories[0]
+  const directionSignatory = signatories[1]
   const globalRate = report.totals.total > 0
     ? Math.round(((report.totals.present + report.totals.late) / report.totals.total) * 100)
     : 0
@@ -123,8 +128,13 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
         <header className="pb-4" style={{ borderBottom: '3px solid #4338ca' }}>
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl" style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)' }}>
-                <span className="text-xl font-bold text-white">K</span>
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(135deg, #4f46e5, #4338ca)' }}>
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
+                ) : (
+                  <span className="text-xl font-bold text-white">K</span>
+                )}
               </div>
               <div>
                 <div className="text-2xl leading-none text-indigo-700" style={{ fontFamily: 'var(--font-handwriting, cursive)' }}>
@@ -284,8 +294,8 @@ export function PrintAttendanceClient({ report, siteName, groupName }: Props) {
 
         {/* ── SIGNATURES ── */}
         <div className="group-block mt-10 grid grid-cols-2 gap-10">
-          <SignatureBlock label="L'enseignant(e)" />
-          <SignatureBlock label="Direction" stamp />
+          <SignatureBlock label={teacherSignatory?.label ?? "L'enseignant(e)"} signatureUrl={teacherSignatory?.signatureUrl} />
+          <SignatureBlock label={directionSignatory?.label ?? 'Direction'} signatureUrl={directionSignatory?.signatureUrl} stamp />
         </div>
 
         {/* ── PIED DE PAGE (répété sur chaque page imprimée) ── */}
@@ -318,10 +328,16 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   )
 }
 
-function SignatureBlock({ label, stamp = false }: { label: string; stamp?: boolean }) {
+function SignatureBlock({ label, signatureUrl, stamp = false }: { label: string; signatureUrl?: string | null; stamp?: boolean }) {
   return (
     <div>
-      <div className="mb-8 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mb-1 flex h-14 items-end justify-center">
+        {signatureUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={signatureUrl} alt={`Signature — ${label}`} className="max-h-14 max-w-[170px] object-contain" />
+        )}
+      </div>
       <div className="flex items-end justify-between">
         <div className="w-40 border-t border-gray-400 pt-1 text-[10px] text-gray-400">Signature</div>
         {stamp && (

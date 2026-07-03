@@ -1,4 +1,5 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { getLogoUrl } from '@/lib/branding'
 import { Sidebar } from './Sidebar'
 
 interface AppShellProps {
@@ -12,6 +13,7 @@ export async function AppShell({ children }: AppShellProps) {
 
   let userName: string | undefined
   let userEmail: string | undefined
+  let logoUrl: string | null = null
 
   if (user) {
     const { data: profile } = await supabase
@@ -22,11 +24,12 @@ export async function AppShell({ children }: AppShellProps) {
 
     userName  = profile?.full_name ?? user.email?.split('@')[0]
     userEmail = user.email ?? undefined
+    logoUrl   = await getLogoUrl(createAdminSupabaseClient(), user.id).catch(() => null)
   }
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar userName={userName} userEmail={userEmail} />
+      <Sidebar userName={userName} userEmail={userEmail} logoUrl={logoUrl} />
 
       {/* Contenu principal */}
       <main className="flex min-w-0 flex-1 flex-col">

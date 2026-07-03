@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Users, MapPin, Key, UserCircle2, FlaskConical } from 'lucide-react'
+import { Users, MapPin, Key, UserCircle2, FlaskConical, Palette } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV_ITEMS = [
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: '/settings/sites',     label: 'Sites',     icon: MapPin       },
   { href: '/settings/users',     label: 'Comptes',   icon: UserCircle2  },
   { href: '/settings/api-keys',  label: 'Clés API',  icon: Key          },
+  { href: '/settings/marque',    label: 'Marque',    icon: Palette      },
   { href: '/settings/mode-test', label: 'Mode Test', icon: FlaskConical },
 ]
 
