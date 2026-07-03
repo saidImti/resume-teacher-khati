@@ -373,3 +373,5 @@ Les deux items restants de la session précédente, traités dans l'ordre demand
 - `tsc` 0 erreur, build prod OK (`/presences` 11.7 kB, `/presences/rapport/print` 2.33 kB).
 
 **Le §4 de l'audit est maintenant clos** : l'appel du jour groupé de Fiche Inscription est porté dans RTK, avec en plus 4 états (vs 2), notification WhatsApp, historique par élève et fiche de présence par période — supérieur au legacy sur tous les axes identifiés dans la comparaison initiale.
+
+**🚀 Déployé en production (2026-07-03)** : PR #5 mergée (`main` @ `ca5b0f5`), Vercel `success`. Module Présences maintenant complet : Appel du jour groupé (par défaut) · Par groupe · Fiche de présence (période + export CSV + PDF A4).
