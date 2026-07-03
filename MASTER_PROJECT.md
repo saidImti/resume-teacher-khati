@@ -1,7 +1,10 @@
 # MASTER PROJECT — Résumé Teacher Khati
 
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
-> Dernière mise à jour : **2026-07-01** (v3.9 — Fusion : outil d'export legacy + Module 00 (référentiels) + migration 015, voir §28)
+> Dernière mise à jour : **2026-07-03** (v4.1 — N° d'inscription auto, Mode Test, module Présences complet [appel du jour groupé, fiche par période, PDF, historique élève], Familles & Paiements refondu. Voir §17 sessions 15-17 et §28.)
+
+> ✅ **Checkpoint de continuité (2026-07-03)** : tout le travail listé ci-dessous est **committé, poussé et déployé en production** (Vercel `success` sur chaque PR). Un redémarrage de poste ou une nouvelle session peut reprendre directement depuis ce document sans rien perdre — aucun travail local non sauvegardé.
+> **Prochaine décision en attente** (pas encore tranchée) : parmi les points restants du bilan qualité (voir §16), attaquer soit **multi-utilisateurs/rôles**, soit un point secondaire (**listes d'attente**, **journal d'activité**). Voir §16 « Immédiat — Action requise ».
 
 > ⚠️ **Projet de fusion en cours** : ce projet doit absorber `C:\AI-Businesses\Fiche Inscription Teacher Khati\` (dashboard HTML/localStorage qui gère en double une partie du périmètre élèves/tarification/paiements). Voir l'audit complet : [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) et §28 ci-dessous avant toute implémentation touchant Élèves, Finances, Présences ou Inscription publique.
 
@@ -159,12 +162,16 @@ payments         → paiement individuel, méthode, référence
 │   └── [id]/           # Profil complet + edit
 ├── planning/           # Emploi du temps hebdomadaire par site
 ├── finances/           # Tarifs + Factures + Revenus
+│   └── invoice/[id]/print # Impression PDF facture A4
+├── presences/          # 3 onglets : Appel du jour | Par groupe | Fiche de présence (session 17)
+│   └── rapport/print   # Impression PDF fiche de présence A4 (session 17)
 ├── settings/
 │   ├── page.tsx        # Hub paramètres
 │   ├── groups/         # CRUD groupes
 │   ├── sites/          # Gestion sites
 │   ├── users/          # Gestion utilisateurs (admin)
-│   └── api-keys/       # Clés API externes
+│   ├── api-keys/       # Clés API externes
+│   └── mode-test/      # Générer/purger des élèves fictifs (session 15)
 auth/
 ├── login/              # Page de connexion
 inscription/            # Formulaire public d'inscription famille
@@ -181,7 +188,10 @@ api/
 ├── families/[id]/rate  # Mise à jour tarif famille
 ├── pricing-rules/      # CRUD tarifs
 ├── public-registration # Inscription publique famille
-└── registration-link   # Génération lien d'inscription
+├── registration-link   # Génération lien d'inscription
+├── attendance/day      # (session 17) Appel du jour groupé — tous les groupes d'une date
+├── attendance/report   # (session 16) Registre de présence agrégé par période
+└── test-data           # (session 15) Générer/purger des élèves fictifs
 ```
 
 ### Composants (src/components/)
@@ -201,7 +211,15 @@ dashboard/
 eleves/
 ├── ElevesContent.tsx         # Liste filtrée + stats (total/actif/essai/parti)
 ├── StudentForm.tsx           # Formulaire inscription complète
-└── StudentProfile.tsx        # Profil élève avec historique
+├── StudentProfile.tsx        # Profil élève : historique + section Présences annuelle (session 16)
+└── FamiliesPaymentsContent.tsx # Registre familles, heatmap 12 mois, détail déplié (refonte session 16)
+
+presences/                    # (session 17 — 3 onglets)
+├── PresencesTabs.tsx          # Sélecteur d'onglet : Appel du jour | Par groupe | Fiche de présence
+├── DailyCall.tsx               # Appel du jour groupé (tous les groupes d'une date, par site)
+├── AttendanceClient.tsx        # Appel par groupe (ex-composant unique), panneau Appels enregistrés
+├── AttendanceRegister.tsx       # Fiche de présence par période (mois/T1/T2/T3/année/perso) + export CSV
+└── PrintAttendanceClient.tsx    # Page d'impression A4 (/presences/rapport/print)
 
 planning/
 └── PlanningContent.tsx       # Grille 7 jours × sites avec créneaux
@@ -249,7 +267,8 @@ archives/
 └── ResumeDetailClient.tsx
 
 settings/
-└── SettingsNav.tsx
+├── SettingsNav.tsx
+└── TestModeClient.tsx        # Mode Test (session 15) : générer/purger des élèves fictifs
 
 inscription/
 └── PublicRegistrationForm.tsx  # Formulaire public famille
@@ -293,11 +312,14 @@ whatsapp/
 └── formatter.ts   # Formatage message WhatsApp
 
 utils/
-└── index.ts       # cn(), formatDate(), formatCurrency()...
+└── index.ts       # cn(), formatDate(), formatCurrency(), formatRegistrationNumber() (session 15)
 
 api-key.ts          # Validation clés API externes
 with-api-auth.ts    # Middleware auth API
 registration-token.ts  # Génération tokens inscription publique
+test-data.ts        # (session 15) Générer/purger des élèves fictifs — utilisé par /api/test-data
+attendance-report.ts # (session 16) Agrégation registre de présence par période — partagé API + page d'impression
+school-register.ts  # buildSchoolRegister() — registre Familles & Paiements
 ```
 
 ### Types TypeScript (src/types/index.ts)
@@ -519,8 +541,15 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 
 ## 16. PROCHAINES ÉTAPES (Roadmap)
 
-### Immédiat — Action requise
-- [ ] Régénérer `SUPABASE_SERVICE_ROLE_KEY` → Supabase → Settings → API → Reset → mettre à jour dans Vercel
+### Immédiat — Décision en attente (2026-07-03)
+Bilan qualité "grandes écoles" fait le 2026-07-02 : le socle (inscriptions, N° auto, présences, paiements, résumés IA) est jugé solide et déployé. Trois pistes identifiées, **aucune tranchée** :
+- [ ] **Multi-utilisateurs / rôles** — RLS actuelle 100% mono-utilisateur (`user_id = auth.uid()`). Nécessaire avant toute embauche d'un(e) assistant(e). Chantier le plus structurant (touche RLS de toutes les tables école).
+- [ ] **Listes d'attente + conversion des essais** — pas de suivi des prospects en attente de place.
+- [ ] **Journal d'activité** — aucune trace de qui a modifié quoi (admin unique aujourd'hui, mais utile avant multi-utilisateur).
+- Secondaires notés mais pas priorisés : documents/autorisations par famille, portail parents (flag prêt, UI à faire), statistiques de rétention, WhatsApp Business réel (encore test_mode), vérifier le plan de sauvegarde Supabase (point-in-time recovery).
+
+### Ancien point — à revérifier avant de le retirer
+- [ ] Régénérer `SUPABASE_SERVICE_ROLE_KEY` → Supabase → Settings → API → Reset → mettre à jour dans Vercel *(voir §11/§27 — incohérence documentaire jamais formellement close ; les scripts de migration lisent la clé sans erreur, donc probablement déjà fait, mais checkbox jamais cochée)*
 
 ### Phase 5 — WhatsApp Business API (production réelle)
 - [ ] Compte Meta for Developers → app Business
@@ -542,7 +571,9 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 - [x] Génération automatique des factures mensuelles ✅ (`POST /api/invoices/generate-monthly`)
 - [x] Export PDF des factures ✅ (page `/finances/invoice/[id]/print`, A4, `@media print`, `window.print()`)
 - [x] Rappels de paiement WhatsApp ✅ (bouton par facture + relance groupée, `reminder_sent_at` migration 013)
-- [x] Suivi des présences ✅ (`/presences`, table attendance, migration 010, inscription élèves dans groupes)
+- [x] Suivi des présences ✅ **Module complet** (`/presences`, table attendance, migration 010) : 3 onglets — Appel du jour groupé (tous les groupes d'une date, groupés par site) · Par groupe (appel classique) · Fiche de présence (période Mois/T1/T2/T3/Année/Personnalisée, export CSV, impression PDF A4 `/presences/rapport/print`). Historique complet par élève sur sa fiche (compteurs, taux d'assiduité). Panneau "Appels enregistrés" pour retrouver un appel passé.
+- [x] Numéro d'inscription séquentiel par site ✅ (migrations 015+016, trigger Postgres atomique, badge sur fiche élève, inclus dans WhatsApp d'inscription publique)
+- [x] Mode Test ✅ (`/settings/mode-test` — générer/purger des élèves fictifs pour tester l'app avant la rentrée)
 - [ ] Fiche de paie mensuelle par famille (récapitulatif WhatsApp)
 - [ ] Portail parents (feature flag `parent_portal` prêt, UI à créer)
 
@@ -573,6 +604,9 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 | 12 | 2026-06-22 | Pinterest OAuth (012), impression PDF factures, rappels paiement WhatsApp (013), fix 4 bugs |
 | 13 | 2026-06-23 | Section Outils, outils dynamiques user_tools (014), politique confidentialité, migrations 012-014 ✅ |
 | 14 | 2026-06-23 | Fix presences (sites+groups+sessions sans user_id), inscription élèves dans groupes, routes attendance |
+| 15 | 2026-07-01/02 | **Chantier fusion Fiche Inscription** : audit comparatif complet (`AUDIT_FUSION_TEACHER_KHATI.md`), export legacy + extraction directe leveldb (170 inscriptions, toutes fictives — pivot du périmètre), Module 00 référentiels (sites/niveaux/années), migrations 015+016 (`sites.registration_prefix`, `families.registration_number` + trigger séquentiel par site), section **Mode Test** (`/settings/mode-test` : générer/purger des élèves fictifs, UI premium façon dashboard) |
+| 16 | 2026-07-02 | **Présences retrouvables + historique élève + refonte Familles & Paiements** : panneau "Appels enregistrés" sur `/presences`, section Présences annuelle sur la fiche élève (compteurs, taux d'assiduité, historique complet), fix étiquette "Présent"→"Actif", refonte heatmap 12 mois de Familles & Paiements (fin du débordement horizontal) |
+| 17 | 2026-07-03 | **PDF fiche de présence + Appel du jour groupé** : `/presences/rapport/print` (A4, même pattern que factures), nouvel onglet "Appel du jour" — tous les groupes d'une date groupés par site, sauvegarde batch en un clic ; §4 de l'audit fusion clos (legacy égalé et dépassé sur les présences) |
 
 ---
 
@@ -590,14 +624,17 @@ node scripts/reset-password.mjs email@example.com NouveauMDP123
 - `POST /api/attendance` → upsert des enregistrements + retourne la liste des absents
 - `GET /api/attendance/sessions?date=&groupId=` → séances récentes (14 jours) avec statut fait/pas fait
 - `POST /api/attendance/sessions` → trouve ou crée une séance automatiquement
+- **`POST /api/attendance/day`** *(session 17)* → l'appel du jour GROUPÉ : reçoit une date, calcule le jour de semaine, récupère tous les créneaux actifs (`schedules.day_of_week`), déduplique par groupe, trouve/crée les sessions du jour, renvoie élèves + présences déjà marquées pour **tous les groupes du jour en un seul appel**
+- **`GET /api/attendance/report?from=&to=&siteId=&groupId=`** *(session 16)* → registre agrégé par élève sur une plage de dates (présent/absent/retard/excusé/total/taux), logique dans `src/lib/attendance-report.ts` (partagée avec la page d'impression)
 
-### Interface `/presences`
-- Sélecteur de groupe filtrable par site + date picker (max = aujourd'hui)
-- Grille d'élèves 2-col/3-col — clic cycle : présent → absent → retard → excusé
-- Bouton "Tous présents" one-click
-- Stats live : chips colorées (vert/rouge/ambre/gris)
-- Post-sauvegarde : panneau notifications WhatsApp si absents > 0
-- Sidebar : icône ClipboardCheck, 1er item de NAV_SCHOOL
+### Interface `/presences` — 3 onglets (`PresencesTabs.tsx`, session 17)
+1. **Appel du jour** *(par défaut)* — `DailyCall.tsx` : navigation par date (précédent/suivant/aujourd'hui), tous les groupes du jour **groupés par site**, compteurs globaux, "Tous présents" par groupe, grille d'élèves cliquable (cycle 4 états), **un seul bouton** sauvegarde tous les groupes modifiés en parallèle. Équivalent RTK de l'appel groupé lieu→créneau→niveau du legacy Fiche Inscription — supérieur (4 états vs 2, notifications WhatsApp).
+2. **Par groupe** — `AttendanceClient.tsx` (ex-composant unique) : sélecteur groupe + date, panneau "Appels enregistrés" (14 jours, clic = rouvre), notification WhatsApp post-sauvegarde si absents.
+3. **Fiche de présence** — `AttendanceRegister.tsx` : présets Mois/T1/T2/T3/Année scolaire/Personnalisée, filtres site+groupe+recherche, synthèse + assiduité globale, registre par élève dépliable, **export CSV** et **bouton Imprimer/PDF** → `/presences/rapport/print` (page A4 `PrintAttendanceClient.tsx`, même pattern que `/finances/invoice/[id]/print`).
+
+Historique par élève : section "Présences" sur `/eleves/[id]` (via `StudentProfile.tsx`) — 4 compteurs annuels, taux d'assiduité adaptatif, historique complet sans limite de temps.
+
+Sidebar : icône ClipboardCheck, 1er item de NAV_SCHOOL.
 
 ---
 
