@@ -422,3 +422,19 @@ Retour utilisateur après vérification personnelle du PDF : (1) le Dashboard (s
 - `tsc` 0 erreur (après purge du cache `.next` obsolète référençant les anciens chemins), build prod OK (`/presences/rapport/print` 4.1 kB, `/finances/invoice/[id]/print` 2.92 kB).
 
 **🚀 Déployé en production (2026-07-03)** : PR #9 mergée (`main` @ `f5233db`), Vercel `success`.
+
+### 2026-07-04 — Fonctionnalité livrée : logo + signataires configurables (Paramètres > Marque)
+
+Demande mémorisée depuis le 2026-07-03 (voir mémoire persistante `demande-signature-logo-parametres`), conçue puis construite après étude des patterns existants (aucun Storage Supabase préexistant, pattern `whatsapp_settings`/`pinterest_settings` réutilisé pour la RLS, `avatar_url` sur `users` repéré mais non détourné — jamais utilisé nulle part, ajout de colonnes/table dédiées à la place).
+
+**Conception validée avec l'utilisateur avant code** : signataires multiples et configurables (pas juste 1 champ fixe) — le 1ᵉʳ remplit le bloc « Enseignant(e) », le 2ᵉ le bloc « Direction » de la fiche de présence ; logo appliqué partout où pertinent, pas seulement les 2 PDF (Sidebar, page de connexion inclus).
+
+- **Migration 017** : `users.logo_url`, table `signatories` (label libre, signature_url, sort_order, RLS owner), bucket Storage privé `branding` (RLS par dossier `user_id`, URLs signées générées à la demande — jamais de lien public permanent).
+- **`src/lib/branding.ts`** : `getLogoUrl`, `getSignatories`, `getLogoUrlForSoleUser` (page de connexion, publique, hypothèse mono-utilisateur cohérente avec le reste du projet).
+- **Routes API** : `POST/DELETE /api/branding/logo`, `GET/POST /api/signatories`, `PATCH/DELETE /api/signatories/[id]`.
+- **Page `/settings/marque`** (nouvel onglet SettingsNav) : upload logo (aperçu/remplacement/retrait), liste de signataires (ajout/renommage/remplacement de signature/suppression), style premium cohérent avec Mode Test.
+- **Branchement** (fallback identique à l'existant si rien n'est uploadé — aucune régression visuelle) : `AppShell`/`Sidebar` (logo), page de connexion (logo, 2 emplacements desktop/mobile), `PrintInvoiceClient` (logo remplace le cercle « K »), `PrintAttendanceClient` (logo masthead + signature/label du 1ᵉʳ signataire sur le bloc Enseignant(e), 2ᵉ sur Direction).
+
+**Vérifié en navigateur réel** (compte jetable, PNG de test 1×1 généré en base64 côté navigateur) : upload logo → `POST /api/branding/logo` 200, URL signée résolue, **visible immédiatement** sur Sidebar (`img[alt="Logo"]` confirmé) et sur une vraie facture existante (cercle « K » disparu). Signataire « Teacher Khati » créé avec signature → label exact **« TEACHER KHATI »** (pas le générique) et image correctement branchée sur le bloc Enseignant(e) de la fiche de présence (props React confirmées : `signatureUrl` = URL signée pointant vers le bon chemin storage), bloc Direction resté vide en fallback (aucun 2ᵉ signataire créé) comme attendu. `tsc` 0 erreur, build prod OK (`/settings/marque` 4.42 kB).
+
+**🚀 Déployé en production (2026-07-04)** : PR #11 mergée (`main` @ `822299e`), Vercel `success`.
