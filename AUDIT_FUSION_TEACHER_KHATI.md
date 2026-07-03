@@ -449,4 +449,4 @@ Retour utilisateur : « la signature n'est pas utilisée » après tentative d'u
 
 **Vérifié en navigateur réel** avec un fichier de test généré à la **taille exacte du vrai fichier bloqué** (2 109 533 octets) : `POST /api/branding/logo → 200 OK` (échouait avant le fix), URL signée résolue, logo affiché. `tsc` 0 erreur, build prod OK.
 
-**🚀 Déployé en production (2026-07-04)** : PR #13 mergée.
+**🚀 Déployé en production (2026-07-04)** : PR #13 mergée (`main` @ `987c826`), Vercel `success`.
