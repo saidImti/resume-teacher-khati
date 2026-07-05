@@ -470,3 +470,5 @@ Retour utilisateur avec capture d'écran du PDF : signature toujours absente mal
 4. **Vérifié en base APRÈS clic** : ligne signataire créée avec `signature_url` correct.
 
 `tsc` 0 erreur, build prod OK.
+
+**🚀 Déployé en production (2026-07-05)** : PR #15 mergée (`main` @ `415550a`), Vercel `success`.
