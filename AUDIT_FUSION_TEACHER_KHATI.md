@@ -450,3 +450,23 @@ Retour utilisateur : « la signature n'est pas utilisée » après tentative d'u
 **Vérifié en navigateur réel** avec un fichier de test généré à la **taille exacte du vrai fichier bloqué** (2 109 533 octets) : `POST /api/branding/logo → 200 OK` (échouait avant le fix), URL signée résolue, logo affiché. `tsc` 0 erreur, build prod OK.
 
 **🚀 Déployé en production (2026-07-04)** : PR #13 mergée (`main` @ `987c826`), Vercel `success`.
+
+### 2026-07-05 — Bug UX confirmé : ambiguïté « Ajouter » faisait croire l'action faite
+
+Retour utilisateur avec capture d'écran du PDF : signature toujours absente malgré une tentative d'upload « qui semblait avoir marché (pas d'erreur visible) ». Vérification en base : `logo_url` toujours `null`, table `signatories` toujours vide — confirmant qu'aucune donnée n'avait été enregistrée malgré l'impression de succès.
+
+**Cause exacte trouvée dans le code** : `BrandingClient.tsx` avait **deux boutons portant le même mot « Ajouter »** — l'un pour ouvrir le formulaire (ligne 218), l'autre pour réellement soumettre la création (ligne 319). Le bouton de sélection de fichier affichait le nom du fichier une fois choisi (`{newFile ? newFile.name : 'Signature (optionnel)'}`), ce qui ressemble visuellement à une confirmation — l'utilisateur a très probablement rempli le nom, sélectionné le fichier, vu le nom du fichier affiché, et cru l'action terminée sans jamais cliquer sur le vrai bouton d'envoi.
+
+**Fix** :
+- Bouton d'ouverture renommé « Nouveau signataire » (au lieu de « Ajouter »).
+- Bouton de sélection de fichier reformulé : `"<nom du fichier> — sélectionnée, clique « Enregistrer » ci-dessous pour valider"` — instruction explicite plutôt qu'un état ambigu.
+- Bouton de soumission renommé **« Enregistrer ce signataire »** (jamais le mot « Ajouter » utilisé deux fois).
+- Champs réorganisés en colonne avec labels explicites (« Nom / rôle », « Signature (image, optionnel) ») au lieu d'une grille compacte.
+
+**Vérifié en navigateur réel — reproduction exacte du bug puis validation du fix** :
+1. Ouverture du formulaire, remplissage du nom, sélection du fichier (bon input ciblé après avoir confirmé qu'il y a bien 2 inputs file sur la page — le premier est celui du logo, piège similaire pour qui automatise ce test).
+2. **Vérifié en base AVANT de cliquer sur « Enregistrer »** : `signatories` toujours vide — confirme que l'apparence de succès (nom de fichier affiché) ne correspondait à aucune sauvegarde, exactement le bug vécu par l'utilisateur.
+3. Clic sur « Enregistrer ce signataire » → toast « Signataire ajouté », bloc « Enseignant(e) » affiche « Teacher Khati ».
+4. **Vérifié en base APRÈS clic** : ligne signataire créée avec `signature_url` correct.
+
+`tsc` 0 erreur, build prod OK.
