@@ -215,7 +215,7 @@ export function BrandingClient({ initialLogoUrl, initialSignatories }: Props) {
                 className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/10"
               >
                 <Plus className="h-3.5 w-3.5" />
-                Ajouter
+                Nouveau signataire
               </button>
             )}
           </div>
@@ -283,40 +283,50 @@ export function BrandingClient({ initialLogoUrl, initialSignatories }: Props) {
                     <X className="h-4 w-4 text-muted-foreground" />
                   </button>
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <input
-                    value={newLabel}
-                    onChange={(e) => setNewLabel(e.target.value)}
-                    placeholder="ex. Teacher Khati, Directeur, Directrice…"
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => newSignatoryFileRef.current?.click()}
-                    className={cn(
-                      'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition',
-                      newFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-border hover:bg-accent'
-                    )}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {newFile ? newFile.name : 'Signature (optionnel)'}
-                  </button>
-                  <input
-                    ref={newSignatoryFileRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
-                  />
+                <div className="mt-3 space-y-2">
+                  <label className="block text-xs font-medium text-muted-foreground">
+                    Nom / rôle
+                    <input
+                      value={newLabel}
+                      onChange={(e) => setNewLabel(e.target.value)}
+                      placeholder="ex. Teacher Khati, Directeur, Directrice…"
+                      className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </label>
+                  <div>
+                    <p className="mb-1 text-xs font-medium text-muted-foreground">Signature (image, optionnel)</p>
+                    <button
+                      type="button"
+                      onClick={() => newSignatoryFileRef.current?.click()}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition',
+                        newFile ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300' : 'border-dashed border-border hover:bg-accent'
+                      )}
+                    >
+                      <Upload className="h-4 w-4 shrink-0" />
+                      {newFile ? (
+                        <span className="truncate">{newFile.name} — sélectionnée, clique « Enregistrer » ci-dessous pour valider</span>
+                      ) : (
+                        'Choisir une image (PNG, JPG ou WebP)'
+                      )}
+                    </button>
+                    <input
+                      ref={newSignatoryFileRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => setNewFile(e.target.files?.[0] ?? null)}
+                    />
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => void createSignatory()}
                   disabled={savingNew}
-                  className="btn-press mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60 sm:w-auto"
+                  className="btn-press mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
                 >
                   {savingNew ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                  Ajouter
+                  {savingNew ? 'Enregistrement…' : 'Enregistrer ce signataire'}
                 </button>
               </div>
             )}
