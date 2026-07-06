@@ -271,6 +271,12 @@ export function PrintAttendanceClient({ report, siteName, groupName, logoUrl, si
                     </tr>
                   </tfoot>
                 </table>
+
+                {/* Signatures — chaque page de groupe est une fiche autonome à faire signer */}
+                <div className="mt-6 grid grid-cols-2 gap-10">
+                  <SignatureBlock label={teacherSignatory?.label ?? "L'enseignant(e)"} signatureUrl={teacherSignatory?.signatureUrl} />
+                  <SignatureBlock label={directionSignatory?.label ?? 'Direction'} signatureUrl={directionSignatory?.signatureUrl} stamp />
+                </div>
               </div>
                 )
               })}
@@ -278,25 +284,21 @@ export function PrintAttendanceClient({ report, siteName, groupName, logoUrl, si
           ))
         })()}
 
-        {/* ── TOTAL GÉNÉRAL (si plusieurs sections) ── */}
+        {/* ── TOTAL GÉNÉRAL (si plusieurs sections) — récapitulatif, sur sa propre page ── */}
         {sections.length > 1 && (
-          <div className="group-block mt-2 flex items-center justify-between rounded-lg px-4 py-2.5" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
-            <span className="text-sm font-bold text-indigo-900">Total général · {report.students} élève{report.students > 1 ? 's' : ''}</span>
-            <div className="flex items-center gap-4 text-xs font-bold">
-              <span style={{ color: '#047857' }}>{report.totals.present} P</span>
-              <span style={{ color: '#b45309' }}>{report.totals.late} R</span>
-              <span style={{ color: '#1d4ed8' }}>{report.totals.excused} E</span>
-              <span style={{ color: '#b91c1c' }}>{report.totals.absent} A</span>
-              <span className="text-indigo-900">{globalRate}% d&apos;assiduité</span>
+          <div className="group-block group-break mt-2 rounded-lg px-4 py-2.5" style={{ background: '#eef2ff', border: '1px solid #c7d2fe' }}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-indigo-900">Total général · {report.students} élève{report.students > 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-4 text-xs font-bold">
+                <span style={{ color: '#047857' }}>{report.totals.present} P</span>
+                <span style={{ color: '#b45309' }}>{report.totals.late} R</span>
+                <span style={{ color: '#1d4ed8' }}>{report.totals.excused} E</span>
+                <span style={{ color: '#b91c1c' }}>{report.totals.absent} A</span>
+                <span className="text-indigo-900">{globalRate}% d&apos;assiduité</span>
+              </div>
             </div>
           </div>
         )}
-
-        {/* ── SIGNATURES ── */}
-        <div className="group-block mt-10 grid grid-cols-2 gap-10">
-          <SignatureBlock label={teacherSignatory?.label ?? "L'enseignant(e)"} signatureUrl={teacherSignatory?.signatureUrl} />
-          <SignatureBlock label={directionSignatory?.label ?? 'Direction'} signatureUrl={directionSignatory?.signatureUrl} stamp />
-        </div>
 
         {/* ── PIED DE PAGE (répété sur chaque page imprimée) ── */}
         <div className="print-footer flex items-center justify-between border-t border-gray-200 bg-white px-1 pt-1.5 text-[9px] text-gray-400">
