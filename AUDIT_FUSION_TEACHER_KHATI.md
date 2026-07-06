@@ -472,3 +472,20 @@ Retour utilisateur avec capture d'écran du PDF : signature toujours absente mal
 `tsc` 0 erreur, build prod OK.
 
 **🚀 Déployé en production (2026-07-05)** : PR #15 mergée (`main` @ `415550a`), Vercel `success`.
+
+### 2026-07-06 — Bug confirmé : signature absente sur les pages de groupe intermédiaires
+
+Demande utilisateur : « regarde bien ce qu'il va et ce qu'il ne vas pas entre le site et la signe [signature] à imprimer la liste de présence ». Vérification en base : `logo_url` et `signatories` toujours vides en production — la signature n'avait donc encore jamais été réellement enregistrée depuis le fix UX de la veille (l'utilisateur n'avait pas encore réessayé).
+
+**Cause exacte trouvée dans le code** : `PrintAttendanceClient.tsx` rendait le bloc de signature (Teacher Khati / Direction) **une seule fois, après la boucle de tous les groupes** — alors que chaque groupe imprime sur sa propre page (`break-before: page`, fix du 2026-07-03). Conséquence : seule la **dernière page** du registre portait une zone de signature ; toutes les pages de groupe précédentes n'en avaient aucune. C'est exactement le décalage entre pagination par site/groupe et signature signalé par l'utilisateur.
+
+**Fix** : le bloc `SignatureBlock` (label + image) est désormais rendu **à l'intérieur de chaque bloc de groupe**, juste après le tableau — chaque page devient une fiche autonome et signable. Le récapitulatif « Total général » (cas multi-sites) reçoit sa propre classe `group-break` pour partir sur sa page finale plutôt que de coller au dernier groupe.
+
+**Vérifié en navigateur réel avec compte de test jetable** (créé et supprimé après coup, données réelles inchangées) :
+1. Upload logo + signataire « Teacher Khati » via `/settings/marque` — reconfirme au passage que le fix du bouton « Ajouter » de la veille fonctionne bien de bout en bout (`POST /api/branding/logo → 200`, `POST /api/signatories → 201`).
+2. Seed de 2 élèves sur 2 sites différents (Champigny, Maison-Alfort) avec un appel chacun.
+3. Impression du registre (période année scolaire) : confirmé en DOM **2 images de signature distinctes** (une par page de groupe) au lieu d'une seule ; `group-break` correctement posé (1er groupe = pas de saut, 2e groupe = saut de page, Total général = saut de page).
+
+`tsc` 0 erreur.
+
+**🚀 Déployé en production (2026-07-06)** : PR #18 mergée (`main` @ `2110c7b`), Vercel `success`.
