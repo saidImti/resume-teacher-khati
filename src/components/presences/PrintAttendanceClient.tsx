@@ -334,10 +334,14 @@ function SignatureBlock({ label, signatureUrl, stamp = false }: { label: string;
   return (
     <div>
       <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
-      <div className="mb-1 flex h-14 items-end justify-center">
+      <div className="mb-1 flex h-24 items-end justify-start pl-1">
         {signatureUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={signatureUrl} alt={`Signature — ${label}`} className="max-h-14 max-w-[170px] object-contain" />
+          <img
+            src={signatureUrl}
+            alt={`Signature — ${label}`}
+            className="max-h-24 max-w-[260px] object-contain"
+          />
         )}
       </div>
       <div className="flex items-end justify-between">
