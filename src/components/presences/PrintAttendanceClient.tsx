@@ -77,14 +77,21 @@ export function PrintAttendanceClient({ report, siteName, groupName, logoUrl, si
   return (
     <>
       <style>{`
-        @page { size: A4 landscape; margin: 12mm 14mm 18mm 14mm; }
+        /* Chrome ignore souvent la marge @page en impression réelle (dépend du
+           réglage "Marges" du dialogue d'impression) — la marge est donc posée
+           en dur via le padding du document plutôt que via @page, pour être
+           garantie quel que soit ce réglage. */
+        @page { size: A4 landscape; margin: 0; }
         @media print {
           .no-print { display: none !important; }
           html, body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff; }
-          .doc { box-shadow: none !important; margin: 0 !important; width: auto; min-height: 0; padding: 0 !important; }
-          .group-break { break-before: page; }
-          .group-block { break-inside: avoid; }
-          .print-footer { position: fixed; bottom: 0; left: 0; right: 0; }
+          .doc { box-shadow: none !important; margin: 0 !important; width: auto; min-height: 0; padding: 12mm 12mm 16mm !important; }
+          /* padding-top sur l'élément qui débute une nouvelle page : donne une
+             marge haute à CHAQUE page, pas seulement à la première (le padding
+             du .doc lui-même ne s'applique qu'une fois, au tout début du flux). */
+          .group-break { break-before: page; padding-top: 12mm; }
+          .group-block { break-inside: avoid; margin-bottom: 12mm !important; }
+          .print-footer { position: fixed; bottom: 6mm; left: 12mm; right: 12mm; }
           thead { display: table-header-group; }
           tfoot { display: table-footer-group; }
         }
