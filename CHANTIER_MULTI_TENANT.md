@@ -134,12 +134,26 @@ restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement
    IF NOT EXISTS organization_id …` juste avant la fonction. La première tentative avait échoué
    dans une transaction unique → rien n'était resté en base, pas de nettoyage nécessaire avant
    la 2e exécution (réussie). Pendant la fenêtre SQL→déploiement : **ne pas inviter d'utilisateur**.
-6. **Vérification E2E** (serveur dev local + comptes jetables, protocole établi) :
-   intégrité org1 (login existant, toutes les vues + prints) · signup crée org+seed ·
-   **isolation totale org A/B** (UI + sondes API + client browser) · rôles (teacher écrit,
-   viewer bloqué RLS + 403 API) · numéros d'inscription indépendants par org ·
-   inscription publique QR (nouveau + legacy token) · marque par org · purge test scopée ·
-   cleanup jetables.
+6. **Vérification E2E** — EN COURS (2026-07-08) :
+   - ✅ Backfill vérifié en base (service role, lecture seule) : 1 seule org « Teacher Khati »,
+     `organization_id` NOT NULL et peuplé sur les 17 tables métier testées, comptes réels intacts.
+   - 🔴 **Bug préexistant trouvé et corrigé** : le trigger `on_auth_user_created` sur `auth.users`
+     n'existait plus du tout en base (`pg_trigger` vide) — indépendant de ce chantier, probablement
+     cassé depuis un moment (2 comptes créés après la migration 005, censée l'avoir réparé, n'ont
+     jamais eu de ligne `public.users`). Conséquence : `handle_new_user()` ne s'exécutait jamais,
+     donc **aucun signup ne créait de profil ni d'organisation**. Corrigé dans `018_organizations.sql`
+     (ajout idempotent juste après §8) + fix immédiat appliqué en base par l'utilisateur.
+   - ⬜ Reprendre ici : re-tester le signup (compte jetable via `admin.createUser` service-role,
+     `email_confirm: true`, domaine à MX valide type gmail.com — Supabase valide les MX au signup ;
+     éviter `@example.com` et les domaines inventés, rejetés en `email_address_invalid` ; éviter
+     les scripts de vérif écrits/supprimés DANS le repo, ça déclenche des rebuilds Fast Refresh qui
+     perturbent la session navigateur — utiliser `node -e "..."` depuis le répertoire du projet,
+     qui résout `node_modules` via cwd sans toucher au filesystem surveillé).
+   - ⬜ Puis : intégrité org1 (login existant, toutes les vues + prints) · signup crée org+seed ·
+     **isolation totale org A/B** (UI + sondes API + client browser) · rôles (teacher écrit,
+     viewer bloqué RLS + 403 API) · numéros d'inscription indépendants par org ·
+     inscription publique QR (nouveau + legacy token) · marque par org · purge test scopée ·
+     cleanup jetables (auth.admin.deleteUser + delete organizations, dans cet ordre — FK sans cascade).
 7. **Déployer** (PR → merge → Vercel success) puis **documenter** (MASTER §16/§17/migrations,
    AUDIT, mémoire persistante) et une **migration 019** de nettoyage plus tard
    (drop users.logo_url, uniques user_id résiduels).
