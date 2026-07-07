@@ -4,7 +4,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
+import { getOrganizationName } from '@/lib/branding'
 import { sendWhatsAppMessage, normalizePhoneNumber } from '@/lib/whatsapp/send'
 
 const MONTH_NAMES = [
@@ -24,8 +26,9 @@ function buildReminderMessage(opts: {
   periodYear: number
   invoiceNumber: string | null
   isOverdue: boolean
+  schoolName: string
 }): string {
-  const { parentFirst, amount, periodMonth, periodYear, invoiceNumber, isOverdue } = opts
+  const { parentFirst, amount, periodMonth, periodYear, invoiceNumber, isOverdue, schoolName } = opts
   const monthName = MONTH_NAMES[(periodMonth - 1) % 12] ?? ''
   const ref = invoiceNumber ? ` (réf. ${invoiceNumber})` : ''
   const emoji = isOverdue ? '🔴' : '📋'
@@ -41,14 +44,15 @@ function buildReminderMessage(opts: {
     '',
     'Pour tout renseignement, n\'hésitez pas à nous contacter.',
     '',
-    '📚 Teacher Khati — Cours d\'anglais pour enfants',
+    `📚 ${schoolName}`,
   ].join('\n')
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  // Relances de paiement : admin uniquement (matrice RLS finances)
+  if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
   const body = await req.json().catch(() => null)
   const parsed = Schema.safeParse(body)
@@ -58,12 +62,16 @@ export async function POST(req: NextRequest) {
 
   const admin = createAdminSupabaseClient()
 
-  // ── Paramètres WhatsApp ──────────────────────────────────────────────────────
-  const { data: waSettings } = await admin
-    .from('whatsapp_settings')
-    .select('test_mode, test_number')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // ── Paramètres WhatsApp + nom de l'école ────────────────────────────────────
+  const [{ data: waSettings }, orgName] = await Promise.all([
+    admin
+      .from('whatsapp_settings')
+      .select('test_mode, test_number')
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle(),
+    getOrganizationName(admin, ctx.organizationId).catch(() => null),
+  ])
+  const schoolName = orgName ?? 'Votre école'
 
   const testMode   = waSettings?.test_mode ?? true
   const testNumber = normalizePhoneNumber(waSettings?.test_number)
@@ -76,7 +84,7 @@ export async function POST(req: NextRequest) {
       amount_due, amount_paid, status,
       family:families(id, parent1_first, parent1_whatsapp, parent1_phone)
     `)
-    .eq('user_id', user.id)
+    .eq('organization_id', ctx.organizationId)
 
   if ('invoiceId' in parsed.data) {
     invoiceQuery = invoiceQuery.eq('id', parsed.data.invoiceId)
@@ -133,6 +141,7 @@ export async function POST(req: NextRequest) {
       periodYear:    inv.period_year as number,
       invoiceNumber: inv.invoice_number as string | null,
       isOverdue:     inv.status === 'overdue',
+      schoolName,
     })
 
     const sendResult = await sendWhatsAppMessage(destPhone, message)
