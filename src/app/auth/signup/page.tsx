@@ -1,13 +1,11 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { LoginForm } from './LoginForm'
+import { SignupForm } from './SignupForm'
 
-export const metadata: Metadata = { title: 'Connexion' }
+export const metadata: Metadata = { title: 'Créer mon école' }
 
-export default function LoginPage() {
-  // Page publique multi-tenant : branding générique (le logo de chaque
-  // école s'affiche après connexion — Sidebar, documents, etc.)
+export default function SignupPage() {
   return (
     <div className="min-h-screen flex">
       {/* Panneau gauche — Branding */}
@@ -21,21 +19,20 @@ export default function LoginPage() {
 
         <div className="space-y-6">
           <h1 className="text-4xl font-bold leading-tight">
-            Vos résumés de cours,
+            Gérez votre école,
             <br />
-            en quelques secondes.
+            de l&apos;inscription au résumé.
           </h1>
           <p className="text-white/80 text-lg leading-relaxed">
-            Générez automatiquement des résumés professionnels
-            pour les parents, depuis vos contenus Padlet.
+            Élèves, familles, présences, paiements, résumés de cours —
+            tout au même endroit, avec votre logo et votre nom.
           </p>
 
-          {/* Stats */}
           <div className="flex gap-6">
             {[
-              { value: '< 2 min', label: 'par résumé' },
-              { value: '5',       label: 'niveaux gérés' },
-              { value: '∞',       label: 'groupes possibles' },
+              { value: 'Multi-sites', label: 'et multi-groupes' },
+              { value: 'Isolé',       label: 'vos données sont à vous' },
+              { value: '2 min',       label: 'pour démarrer' },
             ].map((s) => (
               <div key={s.label} className="bg-white/10 rounded-xl p-4 flex-1">
                 <div className="text-2xl font-bold">{s.value}</div>
@@ -55,7 +52,6 @@ export default function LoginPage() {
 
       {/* Panneau droit — Formulaire */}
       <div className="flex-1 flex flex-col items-center justify-center p-8">
-        {/* Logo mobile */}
         <div className="flex lg:hidden items-center gap-3 mb-10">
           <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-lg">
             📚
@@ -65,25 +61,25 @@ export default function LoginPage() {
 
         <div className="w-full max-w-sm">
           <div className="mb-8">
-            <h2 className="text-2xl font-bold tracking-tight">Connexion</h2>
+            <h2 className="text-2xl font-bold tracking-tight">Créer mon école</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Accédez à votre espace école
+              Votre espace est prêt en 2 minutes — niveaux et année scolaire inclus
             </p>
           </div>
 
-          <Suspense fallback={<div className="h-48 rounded-xl border border-border bg-card" />}>
-            <LoginForm />
+          <Suspense fallback={<div className="h-64 rounded-xl border border-border bg-card" />}>
+            <SignupForm />
           </Suspense>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Pas encore de compte ?{' '}
-            <Link href="/auth/signup" className="font-medium text-primary underline-offset-4 hover:underline">
-              Créer mon école
+            Déjà un compte ?{' '}
+            <Link href="/auth/login" className="font-medium text-primary underline-offset-4 hover:underline">
+              Se connecter
             </Link>
           </p>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            En vous connectant, vous acceptez notre{' '}
+            En créant un compte, vous acceptez notre{' '}
             <Link href="/confidentialite" className="underline hover:text-foreground transition-colors">
               politique de confidentialité
             </Link>

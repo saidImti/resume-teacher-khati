@@ -1,5 +1,7 @@
 // ─── Branding : logo de l'école + signataires de documents ──────────────────
-// Partagé entre les routes API et les pages d'impression (server components).
+// Multi-tenant : le logo et les signataires appartiennent à l'ORGANISATION
+// (organizations.logo_url, signatories.organization_id) — chaque école a sa
+// propre identité visuelle.
 // Le bucket Storage `branding` est privé — toute lecture passe par une URL
 // signée générée à la demande, jamais de lien public permanent.
 
@@ -18,18 +20,31 @@ export interface Signatory {
   sortOrder: number
 }
 
-export async function getLogoUrl(admin: AnySupabase, userId: string): Promise<string | null> {
-  const { data: user } = await admin.from('users').select('logo_url').eq('id', userId).maybeSingle()
-  if (!user?.logo_url) return null
-  const { data } = await admin.storage.from(BUCKET).createSignedUrl(user.logo_url, SIGNED_URL_TTL)
+export async function getLogoUrl(admin: AnySupabase, organizationId: string): Promise<string | null> {
+  const { data: org } = await admin
+    .from('organizations')
+    .select('logo_url')
+    .eq('id', organizationId)
+    .maybeSingle()
+  if (!org?.logo_url) return null
+  const { data } = await admin.storage.from(BUCKET).createSignedUrl(org.logo_url, SIGNED_URL_TTL)
   return data?.signedUrl ?? null
 }
 
-export async function getSignatories(admin: AnySupabase, userId: string): Promise<Signatory[]> {
+export async function getOrganizationName(admin: AnySupabase, organizationId: string): Promise<string | null> {
+  const { data: org } = await admin
+    .from('organizations')
+    .select('name')
+    .eq('id', organizationId)
+    .maybeSingle()
+  return org?.name ?? null
+}
+
+export async function getSignatories(admin: AnySupabase, organizationId: string): Promise<Signatory[]> {
   const { data } = await admin
     .from('signatories')
     .select('id, label, signature_url, sort_order')
-    .eq('user_id', userId)
+    .eq('organization_id', organizationId)
     .order('sort_order')
 
   return Promise.all((data ?? []).map(async (row) => {
@@ -42,22 +57,12 @@ export async function getSignatories(admin: AnySupabase, userId: string): Promis
   }))
 }
 
-// Résout un logo pour un user_id donné SANS session active (page de connexion,
-// publique). Cohérent avec l'hypothèse mono-utilisateur déjà en place ailleurs
-// dans le projet (scripts de migration, Mode Test) : une seule enseignante.
-export async function getLogoUrlForSoleUser(admin: AnySupabase): Promise<string | null> {
-  const { data: user } = await admin.from('users').select('id, logo_url').limit(1).maybeSingle()
-  if (!user?.logo_url) return null
-  const { data } = await admin.storage.from(BUCKET).createSignedUrl(user.logo_url, SIGNED_URL_TTL)
-  return data?.signedUrl ?? null
+export function storagePathForLogo(organizationId: string, ext: string): string {
+  return `${organizationId}/logo.${ext}`
 }
 
-export function storagePathForLogo(userId: string, ext: string): string {
-  return `${userId}/logo.${ext}`
-}
-
-export function storagePathForSignature(userId: string, signatoryId: string, ext: string): string {
-  return `${userId}/signatories/${signatoryId}.${ext}`
+export function storagePathForSignature(organizationId: string, signatoryId: string, ext: string): string {
+  return `${organizationId}/signatories/${signatoryId}.${ext}`
 }
 
 export const ALLOWED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']

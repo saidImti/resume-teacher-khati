@@ -7,6 +7,7 @@ const PUBLIC_ROUTES = [
   '/auth/signup',
   '/auth/reset-password',
   '/auth/callback',
+  '/inscription', // formulaire public d'inscription (QR code parents)
 ]
 
 // Routes API publiques (pas d'auth requise)
