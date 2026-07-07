@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getLogoUrl } from '@/lib/branding'
 import { PrintInvoiceClient } from '@/components/finances/PrintInvoiceClient'
 
@@ -10,9 +11,8 @@ interface PageProps {
 export default async function PrintInvoicePage({ params }: PageProps) {
   const { id } = await params
 
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const admin = createAdminSupabaseClient()
 
@@ -30,8 +30,9 @@ export default async function PrintInvoicePage({ params }: PageProps) {
         payments(id, amount, method, payment_date, reference, notes)
       `)
       .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
       .single(),
-    getLogoUrl(admin, user.id).catch(() => null),
+    getLogoUrl(admin, ctx.organizationId).catch(() => null),
   ])
 
   if (error || !invoice) notFound()

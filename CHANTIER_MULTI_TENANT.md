@@ -72,18 +72,20 @@ Le plan complet approuvé est dans `C:\Users\saida\.claude\plans\recursive-glidi
 | `src/app/api/users/route.ts` | GET membres de l'org uniquement ; POST invite via `app_metadata { organization_id, role }`, viewer accepté. |
 | `src/app/api/users/[id]/route.ts` | Vérif même-org (404 sinon), PATCH écrit `public.users.role` + full_name, interdiction de changer son propre rôle. |
 | `src/lib/branding.ts` | Org-level : `getLogoUrl(admin, organizationId)` lit `organizations.logo_url`, `getSignatories` filtre org, `getOrganizationName()` ajouté, chemins Storage `{orgId}/…`, `getLogoUrlForSoleUser` supprimé. |
+| `src/app/api/branding/logo/route.ts` | `getOrgContext()`, admin-only (403), upload `{orgId}/logo.*`, update `organizations.logo_url`, suppression de l'ancien fichier si l'extension change. |
+| `src/app/api/signatories/route.ts` + `[id]/route.ts` | GET = tout membre de l'org ; POST/PATCH/DELETE admin-only ; filtre + insert `organization_id` (le `user_id` NOT NULL reste renseigné avec le créateur jusqu'à la 019) ; cross-org → 404 ; chemins Storage org. |
+| `src/components/layout/AppShell.tsx` | `getOrgContext()` → logo + **nom de l'org** + `role` passés à la Sidebar. |
+| `src/components/layout/Sidebar.tsx` | Props `orgName`/`role` : nom de l'org dans le header (fallback « Mon école »), badge rôle (Admin / Enseignant·e / Lecture seule) dans le footer. |
+| `src/app/(app)/settings/marque/page.tsx` | Fetch logo + signataires via `organizationId`. |
+| `src/app/finances/invoice/[id]/print/page.tsx` | `getOrgContext()`, logo org, **facture filtrée par `organization_id`** (anti fuite cross-org par id deviné). |
+| `src/app/presences/rapport/print/page.tsx` | `getOrgContext()`, logo + signataires org (`buildAttendanceReport` garde `userId` jusqu'à l'étape routes de données). |
 
 `npx tsc --noEmit` : **vert** à ce stade (les appelants de branding compilent car les signatures
 restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement faux → étape suivante).
 
 ## ⬜ RESTE À FAIRE (dans l'ordre)
 
-1. **Marque (suite)** — passer les appelants sur l'org :
-   - `src/app/api/branding/logo/route.ts` : `getOrgContext()`, upload vers `{orgId}/logo.*`, update `organizations.logo_url`, admin-only.
-   - `src/app/api/signatories/route.ts` + `[id]/route.ts` : insert/filtre `organization_id`, chemins org, admin-only.
-   - `src/components/layout/AppShell.tsx` : `getOrgContext()` → logo org + **nom de l'org** dans la Sidebar (au lieu du nom en dur) + passer `role` (gating viewer).
-   - `src/app/(app)/settings/marque/page.tsx` : fetch via organizationId.
-   - `src/app/finances/invoice/[id]/print/page.tsx` + `src/app/presences/rapport/print/page.tsx` : getLogoUrl/getSignatories avec organizationId.
+1. ~~**Marque (suite)**~~ — ✅ FAIT (2026-07-07, voir tableau ci-dessus).
 2. **Routes de données** — remplacer `.eq('user_id', …)` par `.eq('organization_id', …)` sur tous les admin-client + poser organization_id sur les inserts admin-client :
    - Inscription publique : `src/lib/registration-token.ts` (payload `{ organizationId }` + **branche legacy `userId`** via `getOrgIdForUser` — QR imprimés valides 90 j), `api/registration-link`, `api/public-registration`, `app/inscription/page.tsx` (le filtre sites.user_id cassé disparaît).
    - `src/lib/attendance-report.ts` + `api/attendance/report` : param `userId` → `organizationId`.

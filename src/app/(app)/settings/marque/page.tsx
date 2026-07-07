@@ -1,18 +1,18 @@
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getLogoUrl, getSignatories } from '@/lib/branding'
 import { BrandingClient } from '@/components/settings/BrandingClient'
 
 // Le layout /settings fournit déjà le Header + la barre d'onglets SettingsNav.
 export default async function MarquePage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const admin = createAdminSupabaseClient()
   const [logoUrl, signatories] = await Promise.all([
-    getLogoUrl(admin, user.id).catch(() => null),
-    getSignatories(admin, user.id).catch(() => []),
+    getLogoUrl(admin, ctx.organizationId).catch(() => null),
+    getSignatories(admin, ctx.organizationId).catch(() => []),
   ])
 
   return (
