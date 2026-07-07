@@ -373,6 +373,14 @@ DELETE FROM whatsapp_settings ws
 CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_settings_org
   ON whatsapp_settings (organization_id);
 
+-- academic_years : une seule année active PAR org (l'index global hérité de
+-- 001_initial_schema.sql bloquait toute 2e organisation — trouvé en vérif E2E
+-- 2026-07-08 : le seed de handle_new_user() échouait en 23505 dès qu'une
+-- organisation avait déjà une année active, empêchant tout signup suivant).
+DROP INDEX IF EXISTS idx_academic_years_active;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_years_org_active
+  ON academic_years (organization_id, is_active) WHERE is_active = true;
+
 -- Numéro d'inscription : séquence PAR org (verrou + MAX scannés par org)
 CREATE OR REPLACE FUNCTION assign_family_registration_number()
 RETURNS TRIGGER
