@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Student, Enrollment, Payment, Invoice } from '@/types'
 import { formatRegistrationNumber } from '@/lib/utils'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 
 interface GroupOption {
   id: string
@@ -54,6 +55,7 @@ const PAYMENT_METHODS: Record<string, string> = {
 
 export function StudentProfile({ student, enrollments, payments, invoices, groups, attendance }: Props) {
   const router = useRouter()
+  const { canWrite } = useOrgRole()
   const st = STATUS_CONFIG[student.status] ?? STATUS_CONFIG.active
 
   // ── Formulaire inscription groupe ────────────────────────────────────────────
@@ -134,13 +136,15 @@ export function StudentProfile({ student, enrollments, payments, invoices, group
               </div>
             </div>
           </div>
-          <Link
-            href={`/eleves/${student.id}/edit`}
-            className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
-          >
-            <Edit className="h-4 w-4" />
-            Modifier
-          </Link>
+          {canWrite && (
+            <Link
+              href={`/eleves/${student.id}/edit`}
+              className="flex items-center gap-2 rounded-xl border border-[var(--color-border)] px-4 py-2.5 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-bg)] transition-colors"
+            >
+              <Edit className="h-4 w-4" />
+              Modifier
+            </Link>
+          )}
         </div>
       </div>
 
@@ -198,13 +202,15 @@ export function StudentProfile({ student, enrollments, payments, invoices, group
               icon={<BookOpen className="h-4 w-4 text-violet-500" />}
               title="Groupes"
               action={
-                <button
-                  onClick={() => setShowEnroll((v) => !v)}
-                  className="flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Inscrire dans un groupe
-                </button>
+                canWrite ? (
+                  <button
+                    onClick={() => setShowEnroll((v) => !v)}
+                    className="flex items-center gap-1 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Inscrire dans un groupe
+                  </button>
+                ) : undefined
               }
             >
               {/* Formulaire d'inscription */}

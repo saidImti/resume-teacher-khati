@@ -1,6 +1,7 @@
 import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { getLogoUrl, getOrganizationName } from '@/lib/branding'
 import { getOrgContext } from '@/lib/org'
+import { OrgRoleProvider } from '@/contexts/OrgRoleContext'
 import { Sidebar } from './Sidebar'
 import type { OrgRole } from '@/lib/with-api-auth'
 
@@ -35,13 +36,15 @@ export async function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar userName={userName} userEmail={userEmail} logoUrl={logoUrl} orgName={orgName} role={role} />
+    <OrgRoleProvider role={role ?? 'viewer'}>
+      <div className="flex min-h-screen bg-background">
+        <Sidebar userName={userName} userEmail={userEmail} logoUrl={logoUrl} orgName={orgName} role={role} />
 
-      {/* Contenu principal */}
-      <main className="flex min-w-0 flex-1 flex-col">
-        {children}
-      </main>
-    </div>
+        {/* Contenu principal */}
+        <main className="flex min-w-0 flex-1 flex-col">
+          {children}
+        </main>
+      </div>
+    </OrgRoleProvider>
   )
 }

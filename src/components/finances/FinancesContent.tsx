@@ -8,6 +8,7 @@ import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 import { GenerateInvoicesButton } from './GenerateInvoicesButton'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 
 interface RevenueRow {
   period_month: number
@@ -67,6 +68,8 @@ type FamilyRateForm = {
 }
 
 export function FinancesContent({ sites, pricingRules, invoices, revenueStats, currentYear, families }: Props) {
+  // Finances : mutations admin-only (matrice RLS) — la page reste consultable
+  const { isAdmin } = useOrgRole()
   const [tab, setTab] = useState<'dashboard' | 'factures' | 'tarifs'>('dashboard')
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all')
   const [filterSite, setFilterSite] = useState('all')
@@ -356,10 +359,12 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                       Tarifs, situations particulières, facturation et paiements réunis dans un parcours de gestion unique.
                     </p>
                   </div>
-                  <button type="button" onClick={() => setTab('tarifs')}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                    <Plus className="h-4 w-4" /> Nouveau tarif
-                  </button>
+                  {isAdmin && (
+                    <button type="button" onClick={() => setTab('tarifs')}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                      <Plus className="h-4 w-4" /> Nouveau tarif
+                    </button>
+                  )}
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <FinanceMetric label="Encaissé" value={`${totalPaid.toFixed(0)} €`} helper="paiements reçus" />
@@ -523,18 +528,20 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
           <div className="space-y-5">
             <FadeIn>
               <div className="flex flex-wrap items-center gap-3">
-                <GenerateInvoicesButton />
-                <button
-                  type="button"
-                  onClick={sendAllReminders}
-                  disabled={sendingReminderAll || invoices.filter(i => ['pending','overdue','partial'].includes(i.status)).length === 0}
-                  className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-40"
-                >
-                  {sendingReminderAll
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <MessageCircle className="h-4 w-4" />}
-                  Relancer les impayés
-                </button>
+                {isAdmin && <GenerateInvoicesButton />}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={sendAllReminders}
+                    disabled={sendingReminderAll || invoices.filter(i => ['pending','overdue','partial'].includes(i.status)).length === 0}
+                    className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-40"
+                  >
+                    {sendingReminderAll
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <MessageCircle className="h-4 w-4" />}
+                    Relancer les impayés
+                  </button>
+                )}
                 {reminderResult && (
                   <span className={`text-xs font-medium px-2 py-1 rounded-lg ${reminderResult.simulated ? 'bg-blue-50 text-blue-700' : reminderResult.sent > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                     {reminderResult.simulated ? `Simulation: ${reminderResult.sent} envoyé(s)` : `${reminderResult.sent} relance(s) envoyée(s)${reminderResult.failed > 0 ? ` · ${reminderResult.failed} échec` : ''}`}
@@ -866,23 +873,27 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                             </div>
                             <p className="line-clamp-2 text-xs text-[var(--color-text-muted)]">{family.custom_rate_note || 'Aucune note'}</p>
                             <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => selectFamilyForRate(family.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                Modifier
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => clearFamilyRate(family)}
-                                disabled={clearingFamilyRateId === family.id}
-                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Retirer
-                              </button>
+                              {isAdmin && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => selectFamilyForRate(family.id)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Modifier
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => clearFamilyRate(family)}
+                                    disabled={clearingFamilyRateId === family.id}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Retirer
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         )

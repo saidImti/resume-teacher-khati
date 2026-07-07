@@ -24,6 +24,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { FadeIn } from '@/components/ui/FadeIn'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 
 interface DashboardContentProps {
   sites: Site[]
@@ -54,6 +55,7 @@ export function DashboardContent({
   schedulesByDay,
   invoices,
 }: DashboardContentProps) {
+  const { canWrite } = useOrgRole()
   const jsDay = new Date().getDay()
   const todayIdx = jsDay === 0 ? 6 : jsDay - 1
   const todayLabel = DAY_LABELS[todayIdx] ?? 'Jour'
@@ -90,7 +92,8 @@ export function DashboardContent({
   }))
 
   const quickActions: QuickAction[] = [
-    {
+    // Actions de création masquées en lecture seule
+    ...(canWrite ? [{
       label: 'Nouveau résumé',
       description: 'Créer le compte-rendu du cours',
       href: '/resumes/new',
@@ -103,7 +106,7 @@ export function DashboardContent({
       href: '/eleves/new',
       icon: GraduationCap,
       tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-900',
-    },
+    }] : []),
     {
       label: 'Planning',
       description: 'Voir les créneaux de la semaine',
@@ -173,12 +176,14 @@ export function DashboardContent({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild size="sm">
-                      <Link href="/resumes/new">
-                        <Plus className="h-4 w-4" />
-                        Nouveau cours
-                      </Link>
-                    </Button>
+                    {canWrite && (
+                      <Button asChild size="sm">
+                        <Link href="/resumes/new">
+                          <Plus className="h-4 w-4" />
+                          Nouveau cours
+                        </Link>
+                      </Button>
+                    )}
                     <Button asChild size="sm" variant="outline">
                       <Link href="/archives">Archives</Link>
                     </Button>
@@ -321,12 +326,14 @@ export function DashboardContent({
               </p>
               <h2 className="mt-1 text-xl font-semibold text-foreground">Groupes par site</h2>
             </div>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/settings/groups/new">
-                <Plus className="h-4 w-4" />
-                Nouveau groupe
-              </Link>
-            </Button>
+            {canWrite && (
+              <Button asChild variant="outline" size="sm">
+                <Link href="/settings/groups/new">
+                  <Plus className="h-4 w-4" />
+                  Nouveau groupe
+                </Link>
+              </Button>
+            )}
           </div>
 
           {sites.length > 0 ? (

@@ -117,8 +117,17 @@ restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement
    - Finances : `api/invoices/current`, `invoices/generate-monthly`, `billing/bulk`, `api/payments`.
    - Config : `api/academic-years` (+activate/+[id]) — les lectures doivent renvoyer les années de l'ORG (pas du user), `api/feature-flags`, `api/whatsapp-settings` (upsert `onConflict: 'organization_id'`), `api/enrollments`, `api/pricing-rules`, `api/fiches/save` + history, `api/attendance` (+day/+sessions), `api/sites`, `api/groups`.
    - `src/lib/test-data.ts` : organizationId en paramètre (plus de « user_id du 1er élève ») + **purge scopée par org**.
-3. **Gating viewer minimal** : masquer boutons de mutation si `role === 'viewer'` (AppShell passe le rôle). RLS = enforcement réel.
-4. **`npx tsc --noEmit` + `npm run build`** verts.
+3. ~~**Gating viewer minimal**~~ — ✅ FAIT (2026-07-07) :
+   - `src/contexts/OrgRoleContext.tsx` (nouveau) : `useOrgRole()` → `{ role, canWrite, isAdmin }`, injecté par AppShell (server → client, aucun fetch).
+   - Sidebar : viewer ne voit que le hub Paramètres (années/fonctionnalités/mode test masqués).
+   - Dashboard : quick actions de création + « Nouveau cours » + « Nouveau groupe » masqués si viewer.
+   - Élèves : « Inscrire un élève » (canWrite), « Gérer » paiements (isAdmin), profil élève : « Modifier » + « Inscrire dans un groupe » (canWrite).
+   - Familles & paiements : barre d'actions collectives + « Modifier le tarif » (isAdmin), « Archiver » (canWrite).
+   - Finances : « Nouveau tarif », génération factures, relances, modifier/retirer tarif famille (isAdmin) — page consultable par tous.
+   - Présences : viewer ne voit que l'onglet « Fiche de présence » (l'appel écrit des sessions).
+   - Planning : boutons créer/dupliquer/modifier/supprimer créneau (canWrite).
+   - Rappel : c'est de l'UX — l'enforcement réel est RLS + 403 API (étape 2).
+4. ~~**`npx tsc --noEmit` + `npm run build`**~~ — ✅ verts (2026-07-07).
 5. **Appliquer 018** (utilisateur, SQL Editor Supabase — fichier complet en un shot). Pendant la fenêtre SQL→déploiement : **ne pas inviter d'utilisateur**.
 6. **Vérification E2E** (serveur dev local + comptes jetables, protocole établi) :
    intégrité org1 (login existant, toutes les vues + prints) · signup crée org+seed ·

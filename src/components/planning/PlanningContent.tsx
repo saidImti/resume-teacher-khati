@@ -9,6 +9,7 @@ import { buildCapacitySummary } from '@/lib/planning-capacity'
 import { DAY_LABELS } from '@/types'
 import type { Group, Level, Site, Schedule, Student, DayOfWeek } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 
 interface Props {
   sites: Site[]
@@ -57,6 +58,7 @@ function siteColor(idx: number) {
 }
 
 export function PlanningContent({ sites, schedulesByDay, students, groups }: Props) {
+  const { canWrite } = useOrgRole()
   const [filterSite, setFilterSite] = useState('all')
   const [localSchedules, setLocalSchedules] = useState(schedulesByDay)
   const [modal, setModal] = useState<{ open: boolean; form: SlotForm }>({ open: false, form: EMPTY_FORM })
@@ -256,14 +258,16 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                       Visualisez la charge, les lieux et les niveaux avant d’ajouter ou de déplacer un créneau.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => openNew(new Date().getDay())}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Nouveau créneau
-                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => openNew(new Date().getDay())}
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Nouveau créneau
+                    </button>
+                  )}
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <PlanningMetric label="Inscrits" value={visibleCapacity.occupied} helper={`${visibleCapacity.occupancyRate}% d'occupation`} />
@@ -391,23 +395,29 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                 <div key={day} className="flex min-h-[360px] flex-col overflow-hidden rounded-xl border border-border bg-card">
                   <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5">
                     <span className="text-sm font-semibold text-[var(--color-text)]">{DAY_LABELS[day]}</span>
-                    <button
-                      onClick={() => openNew(day)}
-                      className="flex h-6 w-6 items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:bg-blue-100 hover:text-blue-600 transition-colors"
-                      title="Ajouter un créneau"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => openNew(day)}
+                        className="flex h-6 w-6 items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:bg-blue-100 hover:text-blue-600 transition-colors"
+                        title="Ajouter un créneau"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-2 p-2 min-h-[120px]">
                     {slots.length === 0 ? (
-                      <button
-                        onClick={() => openNew(day)}
-                        className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] py-6 text-xs text-[var(--color-text-muted)] hover:border-blue-300 hover:text-blue-500 transition-colors"
-                      >
-                        + Ajouter
-                      </button>
+                      canWrite ? (
+                        <button
+                          onClick={() => openNew(day)}
+                          className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-[var(--color-border)] py-6 text-xs text-[var(--color-text-muted)] hover:border-blue-300 hover:text-blue-500 transition-colors"
+                        >
+                          + Ajouter
+                        </button>
+                      ) : (
+                        <p className="flex flex-1 items-center justify-center py-6 text-xs text-[var(--color-text-muted)]">Aucun créneau</p>
+                      )
                     ) : (
                       slots.map(slot => {
                         const slotSiteIdx = sites.findIndex(sx => sx.id === slot.site_id)
@@ -415,6 +425,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                         const groupCapacity = capacityByGroup.get(slot.group_id)
                         return (
                           <div key={slot.id} className={`group relative rounded-xl border p-2.5 ${colorCls}`}>
+                            {canWrite && (
                             <div className="absolute right-1.5 top-1.5 hidden gap-0.5 group-hover:flex">
                               <button
                                 onClick={() => openDuplicate(slot)}
@@ -440,6 +451,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
                                   : <Trash2 className="h-3 w-3" />}
                               </button>
                             </div>
+                            )}
                             <div className="flex items-center gap-1.5 mb-1">
                               <Clock className="h-3 w-3 shrink-0" />
                               <span className="text-xs font-semibold">

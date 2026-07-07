@@ -106,6 +106,12 @@ export function Sidebar({ userName, userEmail, logoUrl, orgName, role }: Sidebar
   const router = useRouter()
   const { sidebarOpen, toggleSidebar } = useUIStore()
 
+  // Viewer : la config (années, fonctionnalités, mode test) est admin-only —
+  // ne garder que le hub Paramètres (profil, marque en lecture).
+  const navBottom = role === 'viewer'
+    ? NAV_BOTTOM.filter((item) => item.href === '/settings')
+    : NAV_BOTTOM
+
   async function handleLogout() {
     const supabase = getSupabaseBrowserClient()
     await supabase.auth.signOut()
@@ -189,7 +195,7 @@ export function Sidebar({ userName, userEmail, logoUrl, orgName, role }: Sidebar
             <p className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Système</p>
           )}
           {!sidebarOpen && <div className="my-2 border-t border-border mx-2" />}
-          {NAV_BOTTOM.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
+          {navBottom.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
         </nav>
 
         {/* Footer utilisateur */}
