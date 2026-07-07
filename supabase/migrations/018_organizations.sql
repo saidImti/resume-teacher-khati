@@ -109,6 +109,12 @@ RETURNS BOOLEAN AS $$
   );
 $$ LANGUAGE sql SECURITY DEFINER STABLE SET search_path = public;
 
+-- sites.organization_id doit exister AVANT has_site_access() ci-dessous
+-- (fonction LANGUAGE sql : Postgres valide les colonnes référencées à la
+-- création). Ajoutée ici en avance ; backfill + NOT NULL + index se font
+-- avec le reste des tables en §5 (ADD COLUMN IF NOT EXISTS y est idempotent).
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id);
+
 -- has_site_access : exige désormais aussi que le site soit dans l'org.
 CREATE OR REPLACE FUNCTION has_site_access(site_uuid UUID)
 RETURNS BOOLEAN AS $$
