@@ -489,3 +489,23 @@ Demande utilisateur : « regarde bien ce qu'il va et ce qu'il ne vas pas entre l
 `tsc` 0 erreur.
 
 **🚀 Déployé en production (2026-07-06)** : PR #18 mergée (`main` @ `2110c7b`), Vercel `success`.
+
+### 2026-07-06 (suite) — Signature agrandie et alignée à gauche
+
+Demande : signature plus grande, décalée vers la gauche (~3 cm). Premier essai `translateX(-30mm)` depuis la position centrée : **mesuré en simulant la largeur réelle d'impression** (269 mm après marges `@page`), l'image ne se retrouvait qu'à **0,2 mm du bord imprimable** — un écart d'arrondi entre navigateurs aurait pu la rogner. Remplacé par un alignement `justify-start` + petit padding fixe (mesuré : 1 mm du bord, stable quelle que soit la largeur rendue). Taille : 56→96 px de haut, 170→260 px de large max.
+
+**🚀 Déployé en production (2026-07-06)** : PR #20 mergée (`main` @ `aa24c14`), Vercel `success`.
+
+### 2026-07-06 (suite) — Marges d'impression garanties (bord à bord corrigé)
+
+Retour utilisateur (capture) : le registre s'imprimait bord à bord malgré `@page { margin: … }` défini. Cause : Chrome n'applique la marge `@page` en impression réelle que selon le réglage « Marges » du dialogue d'impression — hors de notre contrôle. **Fix** : marge posée en dur comme contenu réel — `padding` gauche/droite/haut sur `.doc` (répété sur chaque page pour le gauche/droite), `padding-top` sur `.group-break` (marge haute de CHAQUE page suivante, pas seulement la première), `margin-bottom` par bloc de groupe, pied de page réaligné en mm. Vérifié en forçant les styles print en mode écran (compte jetable, 2 groupes / 2 sites) : marges partout, un groupe par page intact.
+
+**🚀 Déployé en production (2026-07-06)** : PR #21 mergée (`main` @ `35cec82`), Vercel `success`.
+
+### 2026-07-07 — 🚧 CHANTIER OUVERT : multi-tenant SaaS (organizations)
+
+**Pivot produit majeur** : l'utilisateur prépare un SaaS — chaque client (école) aura logo, nom et données totalement isolés. Décisions actées : multi-tenant complet maintenant · **inscription libre** (signup = création de son organisation, rôle admin) · données existantes → org « Teacher Khati » · rôle `viewer` ajouté · marque au niveau organisation.
+
+Audit préalable (3 agents de recherche) : inventaire RLS exact des 26 tables, tous les points d'INSERT du code, conception validée. **4 bugs préexistants découverts au passage** (tous confirmés) : escalade de privilège (`withApiAuth` donnait le scope admin à toute session), `GET /api/users` listait toute l'instance Supabase, `PATCH /api/users/[id]` n'écrivait le rôle que dans user_metadata (aucun effet RLS), inscription publique QR cassée (`sites.user_id` inexistant — 42703 — et `/inscription` absent des routes publiques).
+
+**État : EN COURS sur la branche `feat/multi-tenant-saas`** (commit `3f972eb`, poussée). Fait : migration `018_organizations.sql` complète (**PAS APPLIQUÉE**), plomberie org (`with-api-auth`, `org.ts`, middleware, types), signup self-service, `/api/users` org-scopé, `branding.ts` au niveau org. Reste : appelants marque, routes de données, gating viewer, application 018, vérification E2E isolation, déploiement. **Tout le détail (architecture, pièges, ordre de reprise) : [`CHANTIER_MULTI_TENANT.md`](./CHANTIER_MULTI_TENANT.md) sur la branche.** ⚠️ Ne pas merger avant d'avoir appliqué le SQL.
