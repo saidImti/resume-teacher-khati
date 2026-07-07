@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const numberOrNull = z.preprocess(
   (value) => value === '' || value === null || value === undefined ? null : Number(value),
@@ -27,9 +28,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Tarification : admin uniquement (matrice RLS)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
     const { id } = await params
     const parsed = UpdatePricingRuleSchema.safeParse(await request.json())
@@ -46,6 +48,7 @@ export async function PATCH(
         notes: parsed.data.notes || null,
       })
       .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
       .select('*, site:sites(*)')
       .single()
 

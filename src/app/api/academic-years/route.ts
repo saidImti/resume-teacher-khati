@@ -4,17 +4,19 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 export async function GET() {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
+    // Années de l'ORGANISATION (pas du user) — tous les membres voient les mêmes
     const { data, error } = await supabase
       .from('academic_years')
       .select('id, name, start_date, end_date, is_active, color')
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
       .order('start_date', { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -25,7 +27,7 @@ export async function GET() {
     const { data: groupCounts } = await supabase
       .from('groups')
       .select('academic_year_id')
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
       .in('academic_year_id', yearIds)
 
     const countMap = new Map<string, number>()
@@ -48,9 +50,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Config : admin uniquement (matrice RLS)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const body = await req.json() as {
       name:        string
@@ -68,7 +72,9 @@ export async function POST(req: NextRequest) {
     const { data: newYear, error: yearErr } = await supabase
       .from('academic_years')
       .insert({
-        user_id:    user.id,
+        organization_id: ctx.organizationId,
+        // user_id NOT NULL jusqu'à la migration 019
+        user_id:    ctx.user.id,
         name:       body.name,
         start_date: body.start_date,
         end_date:   body.end_date,
@@ -89,13 +95,14 @@ export async function POST(req: NextRequest) {
       const { data: sourceGroups } = await supabase
         .from('groups')
         .select('name, level_id, site_id, max_students, description')
-        .eq('user_id', user.id)
+        .eq('organization_id', ctx.organizationId)
         .eq('academic_year_id', body.copy_from_year_id)
         .eq('is_active', true)
 
       if (sourceGroups && sourceGroups.length > 0) {
         const newGroups = sourceGroups.map((g) => ({
-          user_id:          user.id,
+          organization_id:  ctx.organizationId,
+          user_id:          ctx.user.id,
           academic_year_id: newYear.id,
           name:             g.name,
           level_id:         g.level_id,

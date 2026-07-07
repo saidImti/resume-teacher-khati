@@ -2,18 +2,21 @@
 // Met à jour une année (name, start_date, end_date, color, notes)
 // ─── DELETE /api/academic-years/[id] ─────────────────────────────────────────
 // Supprime une année (seulement si non active et 0 groupes)
+// Config : admin de l'organisation uniquement.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { id } = await params
     const body = await req.json() as {
@@ -28,7 +31,7 @@ export async function PATCH(
       .from('academic_years')
       .update(body)
       .eq('id', id)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
       .select('id, name, start_date, end_date, is_active, color, notes')
       .single()
 
@@ -44,18 +47,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { id } = await params
 
-    // Vérifier que l'année existe et appartient à l'user
+    // Vérifier que l'année existe et appartient à l'organisation
     const { data: year } = await supabase
       .from('academic_years')
       .select('id, name, is_active')
       .eq('id', id)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
       .single()
 
     if (!year) return NextResponse.json({ error: 'Année introuvable' }, { status: 404 })
@@ -68,7 +72,7 @@ export async function DELETE(
       .from('groups')
       .select('id', { count: 'exact', head: true })
       .eq('academic_year_id', id)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
 
     if ((count ?? 0) > 0) {
       return NextResponse.json({
@@ -80,7 +84,7 @@ export async function DELETE(
       .from('academic_years')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ message: `${year.name} supprimée` })

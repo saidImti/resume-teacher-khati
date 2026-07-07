@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const FamilyRateSchema = z.object({
   primary_site_id: z.string().uuid().nullable().optional(),
@@ -16,9 +17,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Tarification : admin uniquement (matrice RLS finances)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
     const { id } = await params
     const parsed = FamilyRateSchema.safeParse(await request.json())
@@ -35,6 +37,7 @@ export async function PATCH(
         custom_rate_note: parsed.data.custom_rate_note || null,
       })
       .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
       .select('*, site:sites(*), students(*)')
       .single()
 

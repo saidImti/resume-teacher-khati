@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const numberOrNull = z.preprocess(
   (value) => value === '' || value === null || value === undefined ? null : Number(value),
@@ -25,9 +26,10 @@ const PricingRuleSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Tarification : admin uniquement (matrice RLS)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
     const parsed = PricingRuleSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -35,10 +37,19 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminSupabaseClient()
+
+    // Le site doit appartenir à l'organisation
+    const { data: site } = await admin.from('sites').select('organization_id').eq('id', parsed.data.site_id).maybeSingle()
+    if (!site || site.organization_id !== ctx.organizationId) {
+      return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
+    }
+
     const { data, error } = await admin
       .from('pricing_rules')
       .insert({
-        user_id: user.id,
+        organization_id: ctx.organizationId,
+        // user_id NOT NULL jusqu'à la migration 019
+        user_id: ctx.user.id,
         site_id: parsed.data.site_id,
         name: parsed.data.name,
         billing_type: parsed.data.billing_type,
