@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Archive, CheckCircle2, Clock3, FileText, Search, Send, Sparkles } from 'lucide-react'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { Header } from '@/components/layout/Header'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { FadeIn } from '@/components/ui/FadeIn'
@@ -40,16 +41,16 @@ interface PageProps {
 }
 
 export default async function ArchivesPage({ searchParams }: PageProps) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
   const admin = createAdminSupabaseClient()
 
   const filters = await searchParams
 
   const [sitesRes, levelsRes] = await Promise.all([
-    admin.from('sites').select('*').eq('is_active', true).order('name'),
-    admin.from('levels').select('*').order('sort_order'),
+    admin.from('sites').select('*').eq('organization_id', orgId).eq('is_active', true).order('name'),
+    admin.from('levels').select('*').eq('organization_id', orgId).order('sort_order'),
   ])
 
   const sites = (sitesRes.data ?? []) as Site[]
@@ -72,6 +73,7 @@ export default async function ArchivesPage({ searchParams }: PageProps) {
         )
       )
     `)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
     .limit(150)
 

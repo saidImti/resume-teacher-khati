@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getSites, getLevels, getGroupsBySite, getActiveAcademicYear, getStudentStats, getSchedulesByDay, getInvoices } from '@/lib/supabase/queries'
 import { Header } from '@/components/layout/Header'
 import { DashboardContent } from '@/components/dashboard/DashboardContent'
@@ -9,22 +10,21 @@ import type { Group } from '@/types'
 export const metadata: Metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
 
   // Chargement des données en parallèle
   const currentYear = new Date().getFullYear()
   const admin = createAdminSupabaseClient()
 
   const [sites, levels, academicYear, studentStats, schedulesByDay, invoices] = await Promise.all([
-    getSites(admin),
-    getLevels(admin),
-    getActiveAcademicYear(admin).catch(() => null),
-    getStudentStats(admin).catch(() => null),
-    getSchedulesByDay(admin).catch(() => ({})),
-    getInvoices(admin, { year: currentYear }).catch(() => []),
+    getSites(admin, orgId),
+    getLevels(admin, orgId),
+    getActiveAcademicYear(admin, orgId).catch(() => null),
+    getStudentStats(admin, orgId).catch(() => null),
+    getSchedulesByDay(admin, orgId).catch(() => ({})),
+    getInvoices(admin, orgId, { year: currentYear }).catch(() => []),
   ])
 
   // Groupes pour chaque site
@@ -32,7 +32,7 @@ export default async function DashboardPage() {
   await Promise.all(
     sites.map(async (site) => {
       if (academicYear) {
-        const groups = await getGroupsBySite(admin, site.id, academicYear.id)
+        const groups = await getGroupsBySite(admin, orgId, site.id, academicYear.id)
         groupsBySite[site.id] = groups
       } else {
         groupsBySite[site.id] = []

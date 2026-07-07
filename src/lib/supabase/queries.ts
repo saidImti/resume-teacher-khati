@@ -1,5 +1,12 @@
 // ============================================================
 // Requêtes Supabase réutilisables — Phase 1
+//
+// Multi-tenant : toute lecture/écriture est scopée par organizationId,
+// explicite en paramètre (pas seulement via RLS) car plusieurs appelants
+// utilisent le client ADMIN qui bypass RLS — sans le filtre explicite ici,
+// une organisation verrait les données de toutes les autres (fuite
+// cross-tenant constatée en vérif E2E du 2026-07-08 : dashboard d'une
+// école neuve affichant les élèves/finances d'une autre école).
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -12,10 +19,11 @@ import type {
 
 // ─── SITES ───────────────────────────────────────────────────
 
-export async function getSites(supabase: SupabaseClient) {
+export async function getSites(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase
     .from('sites')
     .select('*')
+    .eq('organization_id', organizationId)
     .eq('is_active', true)
     .order('name')
 
@@ -23,10 +31,11 @@ export async function getSites(supabase: SupabaseClient) {
   return data as Site[]
 }
 
-export async function getSiteBySlug(supabase: SupabaseClient, slug: string) {
+export async function getSiteBySlug(supabase: SupabaseClient, organizationId: string, slug: string) {
   const { data, error } = await supabase
     .from('sites')
     .select('*')
+    .eq('organization_id', organizationId)
     .eq('slug', slug)
     .single()
 
@@ -36,10 +45,11 @@ export async function getSiteBySlug(supabase: SupabaseClient, slug: string) {
 
 // ─── LEVELS ──────────────────────────────────────────────────
 
-export async function getLevels(supabase: SupabaseClient) {
+export async function getLevels(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase
     .from('levels')
     .select('*')
+    .eq('organization_id', organizationId)
     .order('sort_order')
 
   if (error) throw error
@@ -48,10 +58,11 @@ export async function getLevels(supabase: SupabaseClient) {
 
 // ─── ACADEMIC YEARS ──────────────────────────────────────────
 
-export async function getActiveAcademicYear(supabase: SupabaseClient) {
+export async function getActiveAcademicYear(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase
     .from('academic_years')
     .select('*')
+    .eq('organization_id', organizationId)
     .eq('is_active', true)
     .single()
 
@@ -59,10 +70,11 @@ export async function getActiveAcademicYear(supabase: SupabaseClient) {
   return data as AcademicYear
 }
 
-export async function getAcademicYears(supabase: SupabaseClient) {
+export async function getAcademicYears(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase
     .from('academic_years')
     .select('*')
+    .eq('organization_id', organizationId)
     .order('start_date', { ascending: false })
 
   if (error) throw error
@@ -73,6 +85,7 @@ export async function getAcademicYears(supabase: SupabaseClient) {
 
 export async function getGroupsBySite(
   supabase: SupabaseClient,
+  organizationId: string,
   siteId: string,
   academicYearId?: string
 ) {
@@ -83,6 +96,7 @@ export async function getGroupsBySite(
       level:levels(*),
       site:sites(*)
     `)
+    .eq('organization_id', organizationId)
     .eq('site_id', siteId)
     .eq('is_active', true)
     .order('level_id')
@@ -97,7 +111,7 @@ export async function getGroupsBySite(
   return data as Group[]
 }
 
-export async function getGroupById(supabase: SupabaseClient, groupId: string) {
+export async function getGroupById(supabase: SupabaseClient, organizationId: string, groupId: string) {
   const { data, error } = await supabase
     .from('groups')
     .select(`
@@ -106,6 +120,7 @@ export async function getGroupById(supabase: SupabaseClient, groupId: string) {
       site:sites(*),
       academic_year:academic_years(*)
     `)
+    .eq('organization_id', organizationId)
     .eq('id', groupId)
     .single()
 
@@ -117,12 +132,14 @@ export async function getGroupById(supabase: SupabaseClient, groupId: string) {
 
 export async function getSessionsByGroup(
   supabase: SupabaseClient,
+  organizationId: string,
   groupId: string,
   limit = 20
 ) {
   const { data, error } = await supabase
     .from('sessions')
     .select('*')
+    .eq('organization_id', organizationId)
     .eq('group_id', groupId)
     .order('session_date', { ascending: false })
     .limit(limit)
@@ -131,7 +148,7 @@ export async function getSessionsByGroup(
   return data as Session[]
 }
 
-export async function getSessionById(supabase: SupabaseClient, sessionId: string) {
+export async function getSessionById(supabase: SupabaseClient, organizationId: string, sessionId: string) {
   const { data, error } = await supabase
     .from('sessions')
     .select(`
@@ -142,6 +159,7 @@ export async function getSessionById(supabase: SupabaseClient, sessionId: string
         site:sites(*)
       )
     `)
+    .eq('organization_id', organizationId)
     .eq('id', sessionId)
     .single()
 
@@ -152,6 +170,7 @@ export async function getSessionById(supabase: SupabaseClient, sessionId: string
 export async function createSession(
   supabase: SupabaseClient,
   payload: {
+    organization_id: string
     group_id: string
     session_date: string
     title?: string
@@ -173,11 +192,13 @@ export async function createSession(
 
 export async function getCurrentResume(
   supabase: SupabaseClient,
+  organizationId: string,
   sessionId: string
 ) {
   const { data, error } = await supabase
     .from('resumes')
     .select('*, sections:resume_sections(*)')
+    .eq('organization_id', organizationId)
     .eq('session_id', sessionId)
     .eq('is_current', true)
     .maybeSingle()
@@ -189,11 +210,13 @@ export async function getCurrentResume(
 
 export async function getResumeById(
   supabase: SupabaseClient,
+  organizationId: string,
   resumeId: string
 ) {
   const { data, error } = await supabase
     .from('resumes')
     .select('*, sections:resume_sections(*), session:sessions(*, group:groups(*, level:levels(*), site:sites(*)))')
+    .eq('organization_id', organizationId)
     .eq('id', resumeId)
     .single()
 
@@ -203,14 +226,18 @@ export async function getResumeById(
 }
 
 // ─── ACTIVITÉS ───────────────────────────────────────────────
+// Bibliothèque d'activités : org-scopée depuis la migration 018 (avant,
+// world-writable/lisible par tous). Une org neuve démarre avec 0 activité.
 
 export async function getActivities(
   supabase: SupabaseClient,
+  organizationId: string,
   filters?: { levelId?: string; skill?: string; tag?: string }
 ) {
   let query = supabase
     .from('activities')
     .select('*')
+    .eq('organization_id', organizationId)
     .eq('is_public', true)
     .order('usage_count', { ascending: false })
 
@@ -233,20 +260,24 @@ export async function getActivities(
 
 export async function getSiteStats(
   supabase: SupabaseClient,
+  organizationId: string,
   siteId: string,
   academicYearId: string
 ): Promise<SiteStats> {
   const [sitesRes, groupsRes, sessionsRes, resumesRes] = await Promise.all([
-    supabase.from('sites').select('*').eq('id', siteId).single(),
+    supabase.from('sites').select('*').eq('organization_id', organizationId).eq('id', siteId).single(),
     supabase.from('groups').select('id, is_active')
+      .eq('organization_id', organizationId)
       .eq('site_id', siteId)
       .eq('academic_year_id', academicYearId),
     supabase.from('sessions')
       .select('id, session_date, group:groups!inner(site_id)')
+      .eq('organization_id', organizationId)
       .eq('groups.site_id', siteId)
       .gte('session_date', getWeekStart()),
     supabase.from('resumes')
       .select('id, status, session:sessions!inner(group:groups!inner(site_id))')
+      .eq('organization_id', organizationId)
       .eq('sessions.groups.site_id', siteId)
       .eq('is_current', true),
   ])
@@ -281,19 +312,21 @@ function getWeekStart(): string {
 
 // ─── FAMILLES ────────────────────────────────────────────────
 
-export async function getFamilies(supabase: SupabaseClient) {
+export async function getFamilies(supabase: SupabaseClient, organizationId: string) {
   const { data, error } = await supabase
     .from('families')
     .select('*, site:sites(*), students(*)')
+    .eq('organization_id', organizationId)
     .order('parent1_last')
   if (error) throw error
   return (data ?? []) as Family[]
 }
 
-export async function getFamilyById(supabase: SupabaseClient, id: string) {
+export async function getFamilyById(supabase: SupabaseClient, organizationId: string, id: string) {
   const { data, error } = await supabase
     .from('families')
     .select('*, site:sites(*), students(*, site:sites(*), level:levels(*))' )
+    .eq('organization_id', organizationId)
     .eq('id', id)
     .single()
   if (error) throw error
@@ -302,7 +335,7 @@ export async function getFamilyById(supabase: SupabaseClient, id: string) {
 
 export async function upsertFamily(
   supabase: SupabaseClient,
-  family: Partial<Family> & { user_id: string }
+  family: Partial<Family> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('families')
@@ -313,14 +346,14 @@ export async function upsertFamily(
   return data as Family
 }
 
-export async function deleteFamily(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from('families').delete().eq('id', id)
+export async function deleteFamily(supabase: SupabaseClient, organizationId: string, id: string) {
+  const { error } = await supabase.from('families').delete().eq('organization_id', organizationId).eq('id', id)
   if (error) throw error
 }
 
 // ─── ÉLÈVES ──────────────────────────────────────────────────
 
-export async function getStudents(supabase: SupabaseClient, filters?: {
+export async function getStudents(supabase: SupabaseClient, organizationId: string, filters?: {
   siteId?: string
   status?: string
   levelId?: string
@@ -328,6 +361,7 @@ export async function getStudents(supabase: SupabaseClient, filters?: {
   let q = supabase
     .from('students')
     .select('*, site:sites(*), level:levels(*), family:families(parent1_first,parent1_last,parent1_phone), enrollments(*, group:groups(*, level:levels(*), site:sites(*)))')
+    .eq('organization_id', organizationId)
     .order('last_name')
 
   if (filters?.siteId)  q = q.eq('site_id',  filters.siteId)
@@ -339,10 +373,11 @@ export async function getStudents(supabase: SupabaseClient, filters?: {
   return (data ?? []) as Student[]
 }
 
-export async function getStudentById(supabase: SupabaseClient, id: string) {
+export async function getStudentById(supabase: SupabaseClient, organizationId: string, id: string) {
   const { data, error } = await supabase
     .from('students')
     .select('*, site:sites(*), level:levels(*), family:families(*), enrollments(*, group:groups(*, level:levels(*)))')
+    .eq('organization_id', organizationId)
     .eq('id', id)
     .single()
   if (error) throw error
@@ -351,7 +386,7 @@ export async function getStudentById(supabase: SupabaseClient, id: string) {
 
 export async function upsertStudent(
   supabase: SupabaseClient,
-  student: Partial<Student> & { user_id: string }
+  student: Partial<Student> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('students')
@@ -362,16 +397,16 @@ export async function upsertStudent(
   return data as Student
 }
 
-export async function deleteStudent(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from('students').delete().eq('id', id)
+export async function deleteStudent(supabase: SupabaseClient, organizationId: string, id: string) {
+  const { error } = await supabase.from('students').delete().eq('organization_id', organizationId).eq('id', id)
   if (error) throw error
 }
 
-export async function getStudentStats(supabase: SupabaseClient): Promise<StudentStats> {
+export async function getStudentStats(supabase: SupabaseClient, organizationId: string): Promise<StudentStats> {
   const [allRes, sitesRes, levelsRes] = await Promise.all([
-    supabase.from('students').select('status, site_id, level_id, enrollment_date, departure_date'),
-    supabase.from('sites').select('*'),
-    supabase.from('levels').select('*'),
+    supabase.from('students').select('status, site_id, level_id, enrollment_date, departure_date').eq('organization_id', organizationId),
+    supabase.from('sites').select('*').eq('organization_id', organizationId),
+    supabase.from('levels').select('*').eq('organization_id', organizationId),
   ])
 
   const all     = allRes.data     ?? []
@@ -420,10 +455,11 @@ export async function getStudentStats(supabase: SupabaseClient): Promise<Student
 
 // ─── INSCRIPTIONS ────────────────────────────────────────────
 
-export async function getEnrollmentsByStudent(supabase: SupabaseClient, studentId: string) {
+export async function getEnrollmentsByStudent(supabase: SupabaseClient, organizationId: string, studentId: string) {
   const { data, error } = await supabase
     .from('enrollments')
     .select('*, group:groups(*, site:sites(*), level:levels(*))')
+    .eq('organization_id', organizationId)
     .eq('student_id', studentId)
     .order('start_date', { ascending: false })
   if (error) throw error
@@ -432,7 +468,7 @@ export async function getEnrollmentsByStudent(supabase: SupabaseClient, studentI
 
 export async function upsertEnrollment(
   supabase: SupabaseClient,
-  enrollment: Partial<Enrollment> & { user_id: string }
+  enrollment: Partial<Enrollment> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('enrollments')
@@ -445,10 +481,11 @@ export async function upsertEnrollment(
 
 // ─── PLANNING ────────────────────────────────────────────────
 
-export async function getSchedules(supabase: SupabaseClient, siteId?: string) {
+export async function getSchedules(supabase: SupabaseClient, organizationId: string, siteId?: string) {
   let q = supabase
     .from('schedules')
     .select('*, group:groups(*, level:levels(*)), site:sites(*)')
+    .eq('organization_id', organizationId)
     .eq('is_active', true)
     .order('day_of_week')
     .order('start_time')
@@ -458,8 +495,8 @@ export async function getSchedules(supabase: SupabaseClient, siteId?: string) {
   return (data ?? []) as Schedule[]
 }
 
-export async function getSchedulesByDay(supabase: SupabaseClient, siteId?: string) {
-  const schedules = await getSchedules(supabase, siteId)
+export async function getSchedulesByDay(supabase: SupabaseClient, organizationId: string, siteId?: string) {
+  const schedules = await getSchedules(supabase, organizationId, siteId)
   const byDay: Record<number, Schedule[]> = {}
   for (let d = 0; d <= 6; d++) {
     byDay[d] = schedules.filter(s => s.day_of_week === d)
@@ -469,7 +506,7 @@ export async function getSchedulesByDay(supabase: SupabaseClient, siteId?: strin
 
 export async function upsertSchedule(
   supabase: SupabaseClient,
-  schedule: Partial<Schedule> & { user_id: string }
+  schedule: Partial<Schedule> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('schedules')
@@ -480,17 +517,18 @@ export async function upsertSchedule(
   return data as Schedule
 }
 
-export async function deleteSchedule(supabase: SupabaseClient, id: string) {
-  const { error } = await supabase.from('schedules').delete().eq('id', id)
+export async function deleteSchedule(supabase: SupabaseClient, organizationId: string, id: string) {
+  const { error } = await supabase.from('schedules').delete().eq('organization_id', organizationId).eq('id', id)
   if (error) throw error
 }
 
 // ─── TARIFS ──────────────────────────────────────────────────
 
-export async function getPricingRules(supabase: SupabaseClient, siteId?: string) {
+export async function getPricingRules(supabase: SupabaseClient, organizationId: string, siteId?: string) {
   let q = supabase
     .from('pricing_rules')
     .select('*, site:sites(*)')
+    .eq('organization_id', organizationId)
     .order('effective_from', { ascending: false })
   if (siteId) q = q.eq('site_id', siteId)
   const { data, error } = await q
@@ -498,11 +536,12 @@ export async function getPricingRules(supabase: SupabaseClient, siteId?: string)
   return (data ?? []) as PricingRule[]
 }
 
-export async function getActivePricingRule(supabase: SupabaseClient, siteId: string) {
+export async function getActivePricingRule(supabase: SupabaseClient, organizationId: string, siteId: string) {
   const today = new Date().toISOString().split('T')[0]
   const { data, error } = await supabase
     .from('pricing_rules')
     .select('*, site:sites(*)')
+    .eq('organization_id', organizationId)
     .eq('site_id', siteId)
     .eq('is_active', true)
     .lte('effective_from', today)
@@ -516,7 +555,7 @@ export async function getActivePricingRule(supabase: SupabaseClient, siteId: str
 
 export async function upsertPricingRule(
   supabase: SupabaseClient,
-  rule: Partial<PricingRule> & { user_id: string }
+  rule: Partial<PricingRule> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('pricing_rules')
@@ -554,7 +593,7 @@ export function computeMonthlyAmount(
 
 // ─── FACTURES ────────────────────────────────────────────────
 
-export async function getInvoices(supabase: SupabaseClient, filters?: {
+export async function getInvoices(supabase: SupabaseClient, organizationId: string, filters?: {
   familyId?: string
   status?: string
   year?: number
@@ -563,6 +602,7 @@ export async function getInvoices(supabase: SupabaseClient, filters?: {
   let q = supabase
     .from('invoices')
     .select('*, family:families(parent1_first,parent1_last), site:sites(name,color)')
+    .eq('organization_id', organizationId)
     .order('period_year', { ascending: false })
     .order('period_month', { ascending: false })
 
@@ -576,10 +616,11 @@ export async function getInvoices(supabase: SupabaseClient, filters?: {
   return (data ?? []) as Invoice[]
 }
 
-export async function getInvoiceById(supabase: SupabaseClient, id: string) {
+export async function getInvoiceById(supabase: SupabaseClient, organizationId: string, id: string) {
   const { data, error } = await supabase
     .from('invoices')
     .select('*, family:families(*), site:sites(*), payments(*)')
+    .eq('organization_id', organizationId)
     .eq('id', id)
     .single()
   if (error) throw error
@@ -588,7 +629,7 @@ export async function getInvoiceById(supabase: SupabaseClient, id: string) {
 
 export async function upsertInvoice(
   supabase: SupabaseClient,
-  invoice: Partial<Invoice> & { user_id: string }
+  invoice: Partial<Invoice> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('invoices')
@@ -601,10 +642,11 @@ export async function upsertInvoice(
 
 // ─── PAIEMENTS ───────────────────────────────────────────────
 
-export async function getPaymentsByFamily(supabase: SupabaseClient, familyId: string) {
+export async function getPaymentsByFamily(supabase: SupabaseClient, organizationId: string, familyId: string) {
   const { data, error } = await supabase
     .from('payments')
     .select('*, invoice:invoices(invoice_number, period_month, period_year)')
+    .eq('organization_id', organizationId)
     .eq('family_id', familyId)
     .order('payment_date', { ascending: false })
   if (error) throw error
@@ -613,7 +655,7 @@ export async function getPaymentsByFamily(supabase: SupabaseClient, familyId: st
 
 export async function upsertPayment(
   supabase: SupabaseClient,
-  payment: Partial<Payment> & { user_id: string }
+  payment: Partial<Payment> & { user_id: string; organization_id: string }
 ) {
   const { data, error } = await supabase
     .from('payments')
@@ -626,10 +668,11 @@ export async function upsertPayment(
 
 // ─── STATS FINANCIÈRES ───────────────────────────────────────
 
-export async function getRevenueStats(supabase: SupabaseClient, year: number) {
+export async function getRevenueStats(supabase: SupabaseClient, organizationId: string, year: number) {
   const { data, error } = await supabase
     .from('invoices')
     .select('period_month, amount_due, amount_paid, status, site:sites(name,color)')
+    .eq('organization_id', organizationId)
     .eq('period_year', year)
     .order('period_month')
   if (error) throw error

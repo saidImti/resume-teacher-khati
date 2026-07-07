@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { UserToolsManager, type UserTool } from '@/components/outils/UserToolsManager'
 
@@ -67,15 +68,17 @@ function NativeToolCard({ href, icon, label, description, statusLabel, statusOk 
 
 export default async function OutilsPage() {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const admin = createAdminSupabaseClient()
 
   const [{ data: waSettings }, { data: pinSettings }, { data: userTools }] = await Promise.all([
-    supabase.from('whatsapp_settings').select('test_mode, production_number').eq('user_id', user.id).maybeSingle(),
-    supabase.from('pinterest_settings').select('access_token, pinterest_username').eq('user_id', user.id).maybeSingle(),
-    admin.from('user_tools').select('*').eq('user_id', user.id).order('sort_order').order('created_at'),
+    // whatsapp_settings est org-scopé (config partagée par l'école, admin-only)
+    supabase.from('whatsapp_settings').select('test_mode, production_number').eq('organization_id', ctx.organizationId).maybeSingle(),
+    // pinterest_settings reste personnel (matrice RLS owner-only)
+    supabase.from('pinterest_settings').select('access_token, pinterest_username').eq('user_id', ctx.user.id).maybeSingle(),
+    admin.from('user_tools').select('*').eq('user_id', ctx.user.id).order('sort_order').order('created_at'),
   ])
 
   const waConnected  = !!(waSettings?.production_number)

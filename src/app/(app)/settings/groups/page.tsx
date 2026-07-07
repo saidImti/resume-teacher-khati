@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { FileText, Pencil, Plus } from 'lucide-react'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { ArchiveGroupButton } from '@/components/groups/ArchiveGroupButton'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { Group, Site, Level } from '@/types'
@@ -17,20 +18,21 @@ interface GroupsBySite {
 }
 
 export default async function GroupsSettingsPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
   const admin = createAdminSupabaseClient()
 
   const { data: groups } = await admin
     .from('groups')
     .select('*, site:sites(*), level:levels(*)')
+    .eq('organization_id', ctx.organizationId)
     .eq('is_active', true)
     .order('name')
 
   const { data: sites } = await admin
     .from('sites')
     .select('*')
+    .eq('organization_id', ctx.organizationId)
     .eq('is_active', true)
     .order('name')
 

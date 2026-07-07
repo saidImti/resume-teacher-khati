@@ -134,26 +134,64 @@ restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement
    IF NOT EXISTS organization_id …` juste avant la fonction. La première tentative avait échoué
    dans une transaction unique → rien n'était resté en base, pas de nettoyage nécessaire avant
    la 2e exécution (réussie). Pendant la fenêtre SQL→déploiement : **ne pas inviter d'utilisateur**.
-6. **Vérification E2E** — EN COURS (2026-07-08) :
+6. **Vérification E2E** — EN COURS (2026-07-08), deux bugs bloquants trouvés et corrigés en base +
+   **un bug majeur trouvé et corrigé dans le code** :
    - ✅ Backfill vérifié en base (service role, lecture seule) : 1 seule org « Teacher Khati »,
      `organization_id` NOT NULL et peuplé sur les 17 tables métier testées, comptes réels intacts.
-   - 🔴 **Bug préexistant trouvé et corrigé** : le trigger `on_auth_user_created` sur `auth.users`
-     n'existait plus du tout en base (`pg_trigger` vide) — indépendant de ce chantier, probablement
-     cassé depuis un moment (2 comptes créés après la migration 005, censée l'avoir réparé, n'ont
-     jamais eu de ligne `public.users`). Conséquence : `handle_new_user()` ne s'exécutait jamais,
-     donc **aucun signup ne créait de profil ni d'organisation**. Corrigé dans `018_organizations.sql`
-     (ajout idempotent juste après §8) + fix immédiat appliqué en base par l'utilisateur.
-   - ⬜ Reprendre ici : re-tester le signup (compte jetable via `admin.createUser` service-role,
-     `email_confirm: true`, domaine à MX valide type gmail.com — Supabase valide les MX au signup ;
-     éviter `@example.com` et les domaines inventés, rejetés en `email_address_invalid` ; éviter
-     les scripts de vérif écrits/supprimés DANS le repo, ça déclenche des rebuilds Fast Refresh qui
-     perturbent la session navigateur — utiliser `node -e "..."` depuis le répertoire du projet,
-     qui résout `node_modules` via cwd sans toucher au filesystem surveillé).
-   - ⬜ Puis : intégrité org1 (login existant, toutes les vues + prints) · signup crée org+seed ·
-     **isolation totale org A/B** (UI + sondes API + client browser) · rôles (teacher écrit,
-     viewer bloqué RLS + 403 API) · numéros d'inscription indépendants par org ·
-     inscription publique QR (nouveau + legacy token) · marque par org · purge test scopée ·
-     cleanup jetables (auth.admin.deleteUser + delete organizations, dans cet ordre — FK sans cascade).
+   - 🔴 **Bug préexistant #1 — trigger manquant** : `on_auth_user_created` sur `auth.users`
+     n'existait plus du tout en base (`pg_trigger` vide) — indépendant de ce chantier, cassé depuis
+     un moment (2 comptes créés après la migration 005, censée l'avoir réparé, n'ont jamais eu de
+     ligne `public.users`). Conséquence : `handle_new_user()` ne s'exécutait jamais, donc **aucun
+     signup ne créait de profil ni d'organisation**. Corrigé dans `018_organizations.sql` (ajout
+     idempotent juste après §8) + fix appliqué en base par l'utilisateur.
+   - 🔴 **Bug de migration #2 — index unique non re-scopé** : `idx_academic_years_active` (hérité de
+     `001_initial_schema.sql`, `UNIQUE (is_active) WHERE is_active = true`, GLOBAL toute la table)
+     bloquait le seed de `handle_new_user()` en 23505 dès qu'UNE org avait déjà une année active —
+     **cassait le signup pour toute organisation créée après la première**. Diagnostiqué via
+     scaffolding temporaire (table `_debug_trigger_errors` + `EXCEPTION WHEN OTHERS` capturant
+     `SQLERRM`, posé et retiré en live — nécessaire car GoTrue masque les erreurs SQL réelles
+     derrière un « 500 opaque »/`unexpected_failure`). Corrigé dans `018_organizations.sql` §7 :
+     remplacé par `idx_academic_years_org_active (organization_id, is_active)`.
+   - 🔴 **Bug majeur #3 — isolation cross-tenant réelle, hors périmètre initial de l'étape 2** :
+     l'étape 2 n'avait scopé que les routes `/api/*` ; **`src/lib/supabase/queries.ts` (24 fonctions,
+     utilisées par ~20 Server Components pages)** ne filtrait JAMAIS par organisation. Constaté
+     concrètement : le Dashboard d'une organisation neuve (« École Test A », 0 élève) affichait les
+     169 élèves, 5 sites, finances et planning réels de Teacher Khati. Cause : ces pages appellent
+     `getSites(admin)`, `getStudentStats(admin)`, etc. avec le client ADMIN (bypass RLS) et sans
+     aucun paramètre d'org. **Corrigé en profondeur** :
+     - `queries.ts` réécrit entièrement : chaque fonction exige désormais `organizationId` et filtre
+       `.eq('organization_id', …)`.
+     - `npx tsc --noEmit` utilisé comme checklist pour retrouver tous les appelants cassés par le
+       changement de signature (stratégie efficace pour ce genre de refactor large).
+     - 10 fichiers corrigés via ce mécanisme : dashboard, eleves (page/new/[id]/[id]/edit/
+       familles-paiements), finances, mes-padlets, planning (+ `PlanningContent.tsx` client, prop
+       `organizationId` ajoutée), resumes/new.
+     - Audit manuel complémentaire des pages utilisant `createAdminSupabaseClient` en dehors de
+       `queries.ts` (requêtes `.from(...)` directes) : 8 bugs cross-org supplémentaires trouvés et
+       corrigés — `archives` (liste), `presences` (page, commentaire "mono-utilisateur" obsolète),
+       `resumes/generated` (IDs manipulables via URL), `settings/sites`, `settings/groups`
+       (liste/new/[id]/edit), `outils` (whatsapp_settings filtré par user_id au lieu de l'org),
+       `presences/rapport/print` (nom site/groupe). Les 22 pages utilisant le client admin sont
+       désormais toutes auditées et scopées.
+     - Pages sûres identifiées sans modification nécessaire : `activites/*` et `archives/[id]`
+       utilisent le client de session (RLS org appliquée automatiquement) ; `StudentForm.tsx`
+       (insert client direct) protégé par RLS + trigger `org_fill_from_user`.
+   - ✅ **Isolation vérifiée en conditions réelles** : 2 organisations jetables créées via
+     `admin.createUser` (`email_confirm: true`, domaine à MX valide type gmail.com — Supabase
+     rejette `@example.com` et les domaines inventés en `email_address_invalid`), login réel en
+     navigateur sur « École Test A » → Dashboard affiche 0 partout (avant fix : données de Teacher
+     Khati). Comptes de test + organisations nettoyés après vérification (base revenue à l'état
+     initial : 3 users réels, 1 org).
+   - ⬜ Reste à vérifier : rôles (teacher écrit, viewer bloqué RLS + 403 API) · numéros
+     d'inscription indépendants par org · inscription publique QR (nouveau + legacy token) ·
+     marque par org · purge test scopée (déjà testée au niveau lib, à revalider UI) ·
+     re-tester l'intégrité du compte réel Teacher Khati après ce chantier de fixes (login manuel
+     par l'utilisateur recommandé, credentials non partagés avec l'agent).
+
+**Piège méthodologique noté pour la suite** : ne jamais écrire/supprimer des scripts de vérification
+DANS le repo pendant que le serveur dev tourne — Next.js les détecte et déclenche des rebuilds Fast
+Refresh qui peuvent perturber la session navigateur en cours de test. Utiliser `node -e "..."` depuis
+le répertoire du projet (résout `node_modules` via cwd sans toucher au filesystem surveillé).
 7. **Déployer** (PR → merge → Vercel success) puis **documenter** (MASTER §16/§17/migrations,
    AUDIT, mémoire persistante) et une **migration 019** de nettoyage plus tard
    (drop users.logo_url, uniques user_id résiduels).

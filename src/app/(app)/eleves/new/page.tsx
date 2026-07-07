@@ -1,21 +1,22 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getSites, getLevels, getStudents } from '@/lib/supabase/queries'
 import { StudentForm } from '@/components/eleves/StudentForm'
 
 export const metadata: Metadata = { title: 'Nouvel élève' }
 
 export default async function NewStudentPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
 
   const admin = createAdminSupabaseClient()
   const [sites, levels, students] = await Promise.all([
-    getSites(admin),
-    getLevels(admin),
-    getStudents(supabase),
+    getSites(admin, orgId),
+    getLevels(admin, orgId),
+    getStudents(admin, orgId),
   ])
 
   // Pour pouvoir rattacher à une famille existante, on récupère les familles distinctes

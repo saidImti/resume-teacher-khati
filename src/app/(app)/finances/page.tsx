@@ -1,25 +1,26 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getSites, getPricingRules, getInvoices, getRevenueStats, getFamilies } from '@/lib/supabase/queries'
 import { FinancesContent } from '@/components/finances/FinancesContent'
 
 export const metadata: Metadata = { title: 'Finances' }
 
 export default async function FinancesPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
   const admin = createAdminSupabaseClient()
 
   const currentYear = new Date().getFullYear()
 
   const [sites, pricingRules, invoices, revenueStats, families] = await Promise.all([
-    getSites(admin),
-    getPricingRules(admin).catch(() => []),
-    getInvoices(admin).catch(() => []),
-    getRevenueStats(admin, currentYear).catch(() => []),
-    getFamilies(admin).catch(() => []),
+    getSites(admin, orgId),
+    getPricingRules(admin, orgId).catch(() => []),
+    getInvoices(admin, orgId).catch(() => []),
+    getRevenueStats(admin, orgId, currentYear).catch(() => []),
+    getFamilies(admin, orgId).catch(() => []),
   ])
 
   return (

@@ -16,6 +16,7 @@ interface Props {
   schedulesByDay: Record<number, Schedule[]>
   students: Student[]
   groups: GroupWithRelations[]
+  organizationId: string
 }
 
 interface GroupWithRelations extends Group {
@@ -57,7 +58,7 @@ function siteColor(idx: number) {
   return SLOT_COLORS[idx % SLOT_COLORS.length]!
 }
 
-export function PlanningContent({ sites, schedulesByDay, students, groups }: Props) {
+export function PlanningContent({ sites, schedulesByDay, students, groups, organizationId }: Props) {
   const { canWrite } = useOrgRole()
   const [filterSite, setFilterSite] = useState('all')
   const [localSchedules, setLocalSchedules] = useState(schedulesByDay)
@@ -193,6 +194,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
       const saved = await upsertSchedule(supabase, {
         ...(modal.form.id ? { id: modal.form.id } : {}),
         user_id: user.id,
+        organization_id: organizationId,
         site_id: modal.form.site_id,
         group_id: modal.form.group_id,
         day_of_week: modal.form.day_of_week as DayOfWeek,
@@ -231,7 +233,7 @@ export function PlanningContent({ sites, schedulesByDay, students, groups }: Pro
     const supabase = getSupabaseBrowserClient()
     setDeleting(id)
     try {
-      await deleteSchedule(supabase, id)
+      await deleteSchedule(supabase, organizationId, id)
       setLocalSchedules(prev => ({
         ...prev,
         [day]: (prev[day] ?? []).filter(s => s.id !== id),

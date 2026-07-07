@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { Header } from '@/components/layout/Header'
 import { PresencesTabs } from '@/components/presences/PresencesTabs'
 import type { Group, Site } from '@/types'
@@ -14,16 +15,15 @@ interface GroupWithRelations extends Omit<Group, 'site' | 'level'> {
 // ─── Page serveur ─────────────────────────────────────────────────────────────
 
 export default async function PresencesPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const admin = createAdminSupabaseClient()
 
-  // sites et groups n'ont pas de colonne user_id — app mono-utilisateur, client admin
+  // Joins profonds → client admin, scoping org explicite (RLS non fiable ici)
   const [{ data: sites }, { data: groups }] = await Promise.all([
-    admin.from('sites').select('id, name, slug, color, is_active').eq('is_active', true).order('name'),
-    admin.from('groups').select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)').eq('is_active', true).order('name'),
+    admin.from('sites').select('id, name, slug, color, is_active').eq('organization_id', ctx.organizationId).eq('is_active', true).order('name'),
+    admin.from('groups').select('id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name)').eq('organization_id', ctx.organizationId).eq('is_active', true).order('name'),
   ])
 
   return (

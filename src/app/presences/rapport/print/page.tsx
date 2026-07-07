@@ -22,8 +22,8 @@ export default async function PrintAttendancePage({ searchParams }: PageProps) {
   const admin = createAdminSupabaseClient()
   const [report, { data: site }, { data: group }, logoUrl, signatories] = await Promise.all([
     buildAttendanceReport(admin, { organizationId: ctx.organizationId, from, to, siteId, groupId }),
-    siteId ? admin.from('sites').select('name').eq('id', siteId).single() : Promise.resolve({ data: null }),
-    groupId ? admin.from('groups').select('name, level:levels(emoji)').eq('id', groupId).single() : Promise.resolve({ data: null }),
+    siteId ? admin.from('sites').select('name').eq('organization_id', ctx.organizationId).eq('id', siteId).single() : Promise.resolve({ data: null }),
+    groupId ? admin.from('groups').select('name, level:levels(emoji)').eq('organization_id', ctx.organizationId).eq('id', groupId).single() : Promise.resolve({ data: null }),
     getLogoUrl(admin, ctx.organizationId).catch(() => null),
     getSignatories(admin, ctx.organizationId).catch(() => []),
   ])
