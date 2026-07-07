@@ -4,14 +4,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const sessionId = searchParams.get('sessionId')
@@ -19,11 +19,13 @@ export async function GET(req: NextRequest) {
 
     const admin = createAdminSupabaseClient()
 
-    // sessions, groups, enrollments n'ont pas de user_id — admin client
+    // Le join RLS viderait la réponse sous le client utilisateur — admin client
+    // avec vérification d'appartenance explicite.
     const { data: session, error: sessionErr } = await admin
       .from('sessions')
-      .select('id, session_date, title, group_id, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
+      .select('id, session_date, title, group_id, organization_id, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
       .eq('id', sessionId)
+      .eq('organization_id', ctx.organizationId)
       .single()
 
     if (sessionErr || !session) {
@@ -45,12 +47,13 @@ export async function GET(req: NextRequest) {
 
     if (enrErr) return NextResponse.json({ error: enrErr.message }, { status: 500 })
 
-    // attendance a bien une colonne user_id — client utilisateur
-    const { data: attendances } = await supabase
+    // Présences de l'ORGANISATION (pas du marqueur) — un enseignant voit
+    // l'appel fait par un collègue.
+    const { data: attendances } = await admin
       .from('attendance')
       .select('id, student_id, status, marked_at, notes, notif_sent_at, notif_type')
       .eq('session_id', sessionId)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
 
     const attendanceMap = new Map((attendances ?? []).map((a) => [a.student_id, a]))
     const students = (enrollments ?? []).map((e) => e.student).filter(Boolean)
@@ -75,9 +78,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const body = await req.json() as {
       sessionId: string
@@ -88,9 +92,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'sessionId et records requis' }, { status: 400 })
     }
 
-    // attendance a user_id — client utilisateur
+    // La session doit appartenir à l'organisation
+    const admin = createAdminSupabaseClient()
+    const { data: session } = await admin
+      .from('sessions').select('organization_id').eq('id', body.sessionId).maybeSingle()
+    if (!session || session.organization_id !== ctx.organizationId) {
+      return NextResponse.json({ error: 'Session introuvable' }, { status: 404 })
+    }
+
     const rows = body.records.map((r) => ({
-      user_id:    user.id,
+      organization_id: ctx.organizationId,
+      // user_id NOT NULL jusqu'à la migration 019 — trace du marqueur
+      user_id:    ctx.user.id,
       session_id: body.sessionId,
       student_id: r.studentId,
       status:     r.status,

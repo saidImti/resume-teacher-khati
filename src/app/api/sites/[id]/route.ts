@@ -42,6 +42,7 @@ export async function PATCH(
       .from('sites')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', auth.organizationId)
       .select('*')
       .single()
 
@@ -68,6 +69,7 @@ export async function DELETE(
       .from('sites')
       .update({ is_active: false })
       .eq('id', id)
+      .eq('organization_id', auth.organizationId)
 
     if (error) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
 

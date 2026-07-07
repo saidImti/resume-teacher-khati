@@ -3,22 +3,22 @@
 // POST → créer une session à la volée si elle n'existe pas encore
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const admin = createAdminSupabaseClient()
     const { searchParams } = new URL(req.url)
     const date    = searchParams.get('date')
     const groupId = searchParams.get('groupId')
 
-    // sessions n'a pas de colonne user_id — admin client
+    // Joins profonds → admin client, scoping org explicite
     let query = admin
       .from('sessions')
       .select(`
@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
           site:sites(id, name)
         )
       `)
+      .eq('organization_id', ctx.organizationId)
       .order('session_date', { ascending: false })
       .limit(30)
 
@@ -45,11 +46,12 @@ export async function GET(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const sessionIds = (data ?? []).map((s) => s.id)
-    const { data: attendanceCounts } = await supabase
+    // Présences de l'ORGANISATION (pas seulement celles du marqueur)
+    const { data: attendanceCounts } = await admin
       .from('attendance')
       .select('session_id, status')
       .in('session_id', sessionIds)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
 
     const countMap = new Map<string, { present: number; absent: number; total: number }>()
     for (const a of (attendanceCounts ?? [])) {
@@ -76,9 +78,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
 
     const { groupId, date } = await req.json() as { groupId: string; date: string }
     if (!groupId || !date) {
@@ -87,7 +89,13 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminSupabaseClient()
 
-    // sessions n'a pas de colonne user_id — admin client
+    // Le groupe doit appartenir à l'organisation
+    const { data: group } = await admin
+      .from('groups').select('organization_id').eq('id', groupId).maybeSingle()
+    if (!group || group.organization_id !== ctx.organizationId) {
+      return NextResponse.json({ error: 'Groupe introuvable' }, { status: 404 })
+    }
+
     const { data: existing } = await admin
       .from('sessions')
       .select('id, session_date, title, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
@@ -101,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     const { data: created, error } = await admin
       .from('sessions')
-      .insert({ group_id: groupId, session_date: date })
+      .insert({ group_id: groupId, session_date: date, organization_id: ctx.organizationId })
       .select('id, session_date, title, group:groups(id, name, level:levels(id, name, emoji, color), site:sites(id, name))')
       .single()
 

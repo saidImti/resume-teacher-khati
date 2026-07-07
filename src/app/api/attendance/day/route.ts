@@ -6,7 +6,8 @@
 // (groupé lieu → créneau → niveau).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 // schedules.day_of_week : 0=Lundi … 6=Dimanche (migration 009).
 // JS getDay() : 0=Dimanche … 6=Samedi → conversion.
@@ -17,9 +18,10 @@ function dayOfWeekFromDate(date: string): number {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Crée les sessions manquantes du jour → écriture (admin+teacher)
+    if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
 
     const { date } = await req.json() as { date?: string }
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -27,16 +29,17 @@ export async function POST(req: NextRequest) {
     }
     const dow = dayOfWeekFromDate(date)
 
-    // sessions/groups/schedules/enrollments sans user_id → client admin (MASTER §27)
+    // Joins profonds → client admin (MASTER §27), scoping org explicite
     const admin = createAdminSupabaseClient()
 
-    // 1. Tous les créneaux actifs de ce jour de semaine
+    // 1. Tous les créneaux actifs de ce jour de semaine (de l'organisation)
     const { data: schedules, error: schedErr } = await admin
       .from('schedules')
       .select(`
         id, day_of_week, start_time, end_time, room, max_students, group_id,
         group:groups(id, name, is_active, level:levels(id, name, emoji, color), site:sites(id, name))
       `)
+      .eq('organization_id', ctx.organizationId)
       .eq('day_of_week', dow)
       .eq('is_active', true)
       .order('start_time')
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
     if (missing.length > 0) {
       const { data: created, error: createErr } = await admin
         .from('sessions')
-        .insert(missing.map(group_id => ({ group_id, session_date: date })))
+        .insert(missing.map(group_id => ({ group_id, session_date: date, organization_id: ctx.organizationId })))
         .select('id, group_id')
       if (createErr) return NextResponse.json({ error: createErr.message }, { status: 500 })
       for (const s of created ?? []) sessionByGroup.set(s.group_id, s.id)
@@ -82,13 +85,13 @@ export async function POST(req: NextRequest) {
       .in('status', ['active', 'trial'])
     if (enrErr) return NextResponse.json({ error: enrErr.message }, { status: 500 })
 
-    // 4. Présences déjà marquées sur ces sessions (les miennes)
+    // 4. Présences déjà marquées sur ces sessions (par toute l'organisation)
     const sessionIds = [...sessionByGroup.values()]
-    const { data: attendance } = await supabase
+    const { data: attendance } = await admin
       .from('attendance')
       .select('session_id, student_id, status')
       .in('session_id', sessionIds)
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
     const attKey = new Map((attendance ?? []).map(a => [`${a.session_id}|${a.student_id}`, a.status]))
 
     // 5. Assemblage : un bloc par groupe, trié site → heure

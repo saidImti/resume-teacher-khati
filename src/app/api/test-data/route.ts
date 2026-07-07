@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) return auth.response
 
     const admin = createAdminSupabaseClient()
-    const status = await getTestDataStatus(admin)
+    const status = await getTestDataStatus(admin, auth.organizationId)
     return NextResponse.json(status)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erreur serveur'
@@ -23,7 +23,7 @@ export async function DELETE(request: NextRequest) {
     if (!auth.ok) return auth.response
 
     const admin = createAdminSupabaseClient()
-    const result = await purgeTestData(admin)
+    const result = await purgeTestData(admin, auth.organizationId)
     return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erreur serveur'

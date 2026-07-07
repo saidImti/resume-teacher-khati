@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const CreateGroupSchema = z.object({
   name: z.string().min(1, 'Nom requis').max(100),
@@ -14,9 +15,8 @@ const CreateGroupSchema = z.object({
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { searchParams } = new URL(request.url)
     const siteId = searchParams.get('siteId')
@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     let query = admin
       .from('groups')
       .select('*, level:levels(*), site:sites(*)')
+      .eq('organization_id', ctx.organizationId)
       .order('name')
 
     if (siteId) query = query.eq('site_id', siteId)
@@ -45,9 +46,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
 
     const parsed = CreateGroupSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -58,9 +59,17 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminSupabaseClient()
+
+    // Le site doit appartenir à l'organisation
+    const { data: site } = await admin.from('sites').select('organization_id').eq('id', parsed.data.site_id).maybeSingle()
+    if (!site || site.organization_id !== ctx.organizationId) {
+      return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
+    }
+
     const { data, error } = await admin
       .from('groups')
       .insert({
+        organization_id: ctx.organizationId,
         name: parsed.data.name,
         site_id: parsed.data.site_id,
         level_id: parsed.data.level_id,

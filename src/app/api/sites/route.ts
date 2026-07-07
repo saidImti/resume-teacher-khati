@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await admin
       .from('sites')
       .insert({
+        organization_id: auth.organizationId,
         name: parsed.data.name,
         slug: slugify(parsed.data.name),
         address: parsed.data.address || null,

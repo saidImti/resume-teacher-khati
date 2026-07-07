@@ -20,7 +20,11 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminSupabaseClient()
-    const result = await generateTestStudents(admin, parsed.data)
+    const result = await generateTestStudents(
+      admin,
+      { organizationId: auth.organizationId, userId: auth.userId },
+      parsed.data
+    )
     return NextResponse.json(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Erreur serveur'

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 // ─── Schéma ──────────────────────────────────────────────────────────────────
 
@@ -18,11 +19,10 @@ const ReorderSchema = z.object({
 // ─── PATCH /api/groups/reorder ────────────────────────────────────────────────
 
 export async function PATCH(request: Request) {
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
   const supabase = await createServerSupabaseClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   let body: unknown
   try {
@@ -37,7 +37,7 @@ export async function PATCH(request: Request) {
   }
 
   const updates = parsed.data.groups.map(({ id, sort_order }) =>
-    supabase.from('groups').update({ sort_order }).eq('id', id)
+    supabase.from('groups').update({ sort_order }).eq('id', id).eq('organization_id', ctx.organizationId)
   )
 
   const results = await Promise.all(updates)
