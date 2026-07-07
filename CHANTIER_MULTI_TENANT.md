@@ -78,7 +78,31 @@ Le plan complet approuvé est dans `C:\Users\saida\.claude\plans\recursive-glidi
 | `src/components/layout/Sidebar.tsx` | Props `orgName`/`role` : nom de l'org dans le header (fallback « Mon école »), badge rôle (Admin / Enseignant·e / Lecture seule) dans le footer. |
 | `src/app/(app)/settings/marque/page.tsx` | Fetch logo + signataires via `organizationId`. |
 | `src/app/finances/invoice/[id]/print/page.tsx` | `getOrgContext()`, logo org, **facture filtrée par `organization_id`** (anti fuite cross-org par id deviné). |
-| `src/app/presences/rapport/print/page.tsx` | `getOrgContext()`, logo + signataires org (`buildAttendanceReport` garde `userId` jusqu'à l'étape routes de données). |
+| `src/app/presences/rapport/print/page.tsx` | `getOrgContext()`, logo + signataires org, `buildAttendanceReport` par org. |
+| `src/lib/registration-token.ts` | Payload `{ organizationId, userId }` (userId = émetteur, requis pour les inserts NOT NULL) ; tokens legacy `{ userId }` acceptés. |
+| `src/lib/org.ts` | + `resolveRegistrationOrgId(payload)` (org du token, sinon `getOrgIdForUser`). |
+| `src/app/api/registration-link/route.ts` | `getOrgContext()`, viewer 403, token org. |
+| `src/app/inscription/page.tsx` | Sites + levels par org (fix 42703 `sites.user_id`), textes génériques (« votre école »). |
+| `src/app/api/public-registration/route.ts` | Sites/levels/familles/pricing par org, inserts org, messages avec nom de l'org. |
+| `src/lib/attendance-report.ts` + `api/attendance/report` | Param `userId` → `organizationId`. |
+| `src/app/api/invoices/current` + `generate-monthly` + `[id]/status`, `billing/bulk`, `api/payments` | Admin-only + scoping org. **generate-monthly facturait TOUTES les familles de l'instance** (aucun filtre) → corrigé. Vérif famille même-org (404). |
+| `src/app/api/families/[id]/archive` (writer) + `rate` (admin) | Cross-org corrigé (`eq organization_id`). |
+| `src/app/api/students/[id]/status` | Writer + scoping org. |
+| `src/app/api/academic-years` (+`activate`, +`[id]`) | Lectures par ORG (plus par user), mutations admin-only, inserts org. |
+| `src/app/api/feature-flags` | GET org, PATCH admin-only par `(organization_id, feature_key)`. |
+| `src/app/api/whatsapp-settings` | GET org, PATCH admin-only, upsert `onConflict: 'organization_id'`. |
+| `src/app/api/enrollments` | Writer, vérif élève+groupe même-org, insert org, delete scopé org. |
+| `src/app/api/pricing-rules` (+`[id]`) | Admin-only, vérif site même-org, scoping org. |
+| `src/app/api/attendance` (+`day`, +`sessions`) | Org-scopé. **Fuites corrigées** : schedules du jour toutes-orgs ; présences filtrées « du marqueur » (l'appel d'un collègue était invisible) → filtre org. Viewer 403 sur les écritures. |
+| `src/app/api/sites` (+`[id]`) | Insert + update/delete scopés `auth.organizationId` (withApiAuth). |
+| `src/app/api/groups` (+`[id]`, +`reorder`) | **GET listait les groupes de toutes les orgs** → filtre org. POST/PATCH writer, DELETE admin-only, vérif site même-org. |
+| `src/app/api/whatsapp/payment-reminder` (admin) + `catchup` (writer) | Settings + factures + présences par org ; signature « Teacher Khati » en dur → nom de l'org. |
+| `src/lib/test-data.ts` + `api/test-data` (+`generate`) + `settings/mode-test` | `TestDataContext { organizationId, userId }` (plus de « user_id du 1er élève »), statut/génération/purge scopés org. |
+
+`api/fiches/save` + `history` : inchangés volontairement — `saved_fiches` reste **owner-only**
+(matrice RLS) et le trigger `org_fill_from_user` pose `organization_id` à l'insert.
+Idem `keys`, `outils`, `pinterest` (tables personnelles).
+`whatsapp/send` + `sends` : client session sans filtre user → la RLS org s'applique, rien à changer.
 
 `npx tsc --noEmit` : **vert** à ce stade (les appelants de branding compilent car les signatures
 restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement faux → étape suivante).
@@ -86,7 +110,8 @@ restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement
 ## ⬜ RESTE À FAIRE (dans l'ordre)
 
 1. ~~**Marque (suite)**~~ — ✅ FAIT (2026-07-07, voir tableau ci-dessus).
-2. **Routes de données** — remplacer `.eq('user_id', …)` par `.eq('organization_id', …)` sur tous les admin-client + poser organization_id sur les inserts admin-client :
+2. ~~**Routes de données**~~ — ✅ FAIT (2026-07-07, voir tableau ci-dessus). `npx tsc --noEmit` et `npm run build` verts.
+   (ancien périmètre ci-dessous, conservé pour référence) — remplacer `.eq('user_id', …)` par `.eq('organization_id', …)` sur tous les admin-client + poser organization_id sur les inserts admin-client :
    - Inscription publique : `src/lib/registration-token.ts` (payload `{ organizationId }` + **branche legacy `userId`** via `getOrgIdForUser` — QR imprimés valides 90 j), `api/registration-link`, `api/public-registration`, `app/inscription/page.tsx` (le filtre sites.user_id cassé disparaît).
    - `src/lib/attendance-report.ts` + `api/attendance/report` : param `userId` → `organizationId`.
    - Finances : `api/invoices/current`, `invoices/generate-monthly`, `billing/bulk`, `api/payments`.
