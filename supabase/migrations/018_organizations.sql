@@ -483,6 +483,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+-- Le trigger AFTER INSERT ON auth.users était censé exister depuis la
+-- migration 002 (CREATE OR REPLACE FUNCTION préserve l'OID, donc pas besoin
+-- normalement de re-CREATE TRIGGER pour que la nouvelle version du corps
+-- s'applique). Constaté en vérif E2E (2026-07-08) : le trigger n'existait
+-- PLUS du tout en prod (pg_trigger vide pour 'on_auth_user_created') — les
+-- comptes créés depuis un moment n'avaient donc AUCUN profil public.users.
+-- Bug préexistant, indépendant de ce chantier. Recréé ici pour que 018 soit
+-- auto-suffisante sur une base fraîche ET répare l'état actuel si rejouée.
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
+
 
 -- ─── §9 Policies RLS : pattern plat par organisation ────────
 
