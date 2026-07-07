@@ -5,7 +5,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const Schema = z.object({
   month: z.number().int().min(1).max(12),
@@ -64,9 +65,10 @@ function priceForChildren(rule: DBPricingRule, n: number): number {
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  // Finances : admin uniquement (matrice RLS)
+  if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
   const body = await req.json().catch(() => null)
   const parsed = Schema.safeParse(body)
@@ -85,6 +87,7 @@ export async function POST(req: NextRequest) {
       primary_site_id, custom_monthly_rate, is_active,
       students (id, first_name, last_name, status, site_id)
     `)
+    .eq('organization_id', ctx.organizationId)
     .eq('is_active', true)
 
   if (famErr) return NextResponse.json({ error: famErr.message }, { status: 500 })
@@ -93,6 +96,7 @@ export async function POST(req: NextRequest) {
   const { data: rules, error: rulesErr } = await admin
     .from('pricing_rules')
     .select('id, site_id, billing_type, price_per_session, price_1_child, price_2_children, price_3_children, price_4_children, price_5plus, is_active')
+    .eq('organization_id', ctx.organizationId)
     .eq('is_active', true)
 
   if (rulesErr) return NextResponse.json({ error: rulesErr.message }, { status: 500 })
@@ -107,6 +111,7 @@ export async function POST(req: NextRequest) {
   const { data: existingInvoices } = await admin
     .from('invoices')
     .select('id, family_id, status')
+    .eq('organization_id', ctx.organizationId)
     .eq('period_month', month)
     .eq('period_year', year)
 
@@ -234,7 +239,9 @@ export async function POST(req: NextRequest) {
         await admin
           .from('invoices')
           .insert({
-            user_id:        fam.user_id,
+            organization_id: ctx.organizationId,
+            // user_id NOT NULL jusqu'à la migration 019
+            user_id:        ctx.user.id,
             family_id:      fam.id,
             site_id:        fam.primary_site_id,
             period_month:   month,

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const StatusSchema = z.object({
   status: z.enum(['pending', 'overdue']),
@@ -10,9 +11,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  // Finances : admin uniquement (matrice RLS)
+  if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
   const parsed = StatusSchema.safeParse(await request.json())
   if (!parsed.success) {
@@ -25,6 +27,7 @@ export async function PATCH(
     .from('invoices')
     .select('*')
     .eq('id', id)
+    .eq('organization_id', ctx.organizationId)
     .single()
   if (invoiceError || !invoice) {
     return NextResponse.json({ error: 'Facture introuvable' }, { status: 404 })

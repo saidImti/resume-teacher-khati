@@ -1,9 +1,8 @@
 // ─── Agrégation du registre de présence ─────────────────────────────────────
 // Partagé entre l'API /api/attendance/report et la page d'impression A4.
-// Client ADMIN obligatoire : sessions/groups/sites/levels n'ont pas de user_id
-// et leur RLS (has_site_access) viderait le join sous le client utilisateur
-// (piège documenté MASTER §27). L'appartenance reste garantie par le filtre
-// explicite user_id sur attendance.
+// Client ADMIN obligatoire : la RLS (has_site_access) viderait le join sous
+// le client utilisateur (piège documenté MASTER §27). L'appartenance reste
+// garantie par le filtre explicite organization_id sur attendance.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -31,7 +30,7 @@ export interface AttendanceReport {
 }
 
 export interface AttendanceReportParams {
-  userId: string
+  organizationId: string
   from: string
   to: string
   siteId?: string | null
@@ -40,7 +39,7 @@ export interface AttendanceReportParams {
 
 export async function buildAttendanceReport(
   admin: AnySupabase,
-  { userId, from, to, siteId, groupId }: AttendanceReportParams
+  { organizationId, from, to, siteId, groupId }: AttendanceReportParams
 ): Promise<AttendanceReport> {
   let query = admin
     .from('attendance')
@@ -52,7 +51,7 @@ export async function buildAttendanceReport(
       ),
       student:students(id, first_name, last_name)
     `)
-    .eq('user_id', userId)
+    .eq('organization_id', organizationId)
     .gte('session.session_date', from)
     .lte('session.session_date', to)
 
