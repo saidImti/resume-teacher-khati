@@ -52,3 +52,13 @@ export async function getOrgIdForUser(userId: string): Promise<string | null> {
     .maybeSingle()
   return data?.organization_id ?? null
 }
+
+/**
+ * Organisation d'un token d'inscription publique : portée par le token
+ * (nouveau format), sinon résolue depuis l'émetteur (token legacy).
+ */
+export async function resolveRegistrationOrgId(
+  payload: { organizationId?: string; userId: string }
+): Promise<string | null> {
+  return payload.organizationId ?? getOrgIdForUser(payload.userId)
+}
