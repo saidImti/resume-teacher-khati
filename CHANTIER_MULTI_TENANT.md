@@ -128,7 +128,12 @@ restent `(admin, string)` — mais ils passent encore `user.id`, sémantiquement
    - Planning : boutons créer/dupliquer/modifier/supprimer créneau (canWrite).
    - Rappel : c'est de l'UX — l'enforcement réel est RLS + 403 API (étape 2).
 4. ~~**`npx tsc --noEmit` + `npm run build`**~~ — ✅ verts (2026-07-07).
-5. **Appliquer 018** (utilisateur, SQL Editor Supabase — fichier complet en un shot). Pendant la fenêtre SQL→déploiement : **ne pas inviter d'utilisateur**.
+5. ~~**Appliquer 018**~~ — ✅ FAIT (2026-07-07). Un bug d'ordre trouvé au passage : `has_site_access()` (§4)
+   référençait `sites.organization_id` avant sa création en §5 → 42703 à l'exécution (fonction
+   `LANGUAGE sql`, validée à la création). Corrigé en ajoutant `ALTER TABLE sites ADD COLUMN
+   IF NOT EXISTS organization_id …` juste avant la fonction. La première tentative avait échoué
+   dans une transaction unique → rien n'était resté en base, pas de nettoyage nécessaire avant
+   la 2e exécution (réussie). Pendant la fenêtre SQL→déploiement : **ne pas inviter d'utilisateur**.
 6. **Vérification E2E** (serveur dev local + comptes jetables, protocole établi) :
    intégrité org1 (login existant, toutes les vues + prints) · signup crée org+seed ·
    **isolation totale org A/B** (UI + sondes API + client browser) · rôles (teacher écrit,
