@@ -1,10 +1,47 @@
 # CHANTIER — Multi-tenant SaaS (organizations)
 
 > **État : EN COURS — NE PAS MERGER SUR MAIN EN L'ÉTAT**
-> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-07**
-> Migration `018_organizations.sql` : **écrite mais PAS ENCORE APPLIQUÉE** à la base.
-> Le code de cette branche suppose la migration appliquée — le déployer avant
-> d'appliquer le SQL casserait la prod. Séquence obligatoire : SQL d'abord, code ensuite.
+> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-08**
+> Migration `018_organizations.sql` : **✅ APPLIQUÉE** à la base (+ 2 correctifs post-application,
+> voir §6 et [ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md), [ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
+
+## 🔖 REPRISE ICI (résumé condensé — lire ceci en premier dans une nouvelle session)
+
+**Ce qui vient d'être fait (2026-07-07 → 2026-07-08)** : étapes 1 à 5 du chantier terminées
+(marque org-level, routes `/api/*` scopées, gating viewer UI, migration 018 appliquée).
+Étape 6 (vérification E2E) **en cours** — a débusqué et corrigé **4 bugs**, dont un critique :
+1. Migration cassée par un ordre de sections SQL → corrigé ([ERRORS/001](ERRORS/001-migration-fonction-sql-ordre-colonnes.md)).
+2. Trigger de signup absent en base (bug préexistant, indépendant du chantier) → corrigé ([ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md)).
+3. Index unique bloquant le signup de toute 2ᵉ organisation → corrigé ([ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
+4. 🔴 **Fuite cross-tenant réelle** : le dashboard (et ~20 autres pages) d'une organisation
+   neuve affichait les données de Teacher Khati → corrigé en profondeur ([ERRORS/004](ERRORS/004-fuite-cross-tenant-queries-non-scopees.md)).
+
+Isolation vérifiée en conditions réelles (login navigateur sur une org de test → dashboard
+à 0 partout). Comptes de test nettoyés, base revenue à l'état initial. Tout est commité et
+poussé sur `feat/multi-tenant-saas` (dernier commit : voir `git log`). `tsc --noEmit` et
+`npm run build` verts.
+
+**Ce qu'il reste à faire (dans l'ordre)** — reprendre ici demain :
+1. Vérifier les rôles teacher/viewer en conditions réelles (teacher peut écrire le pédagogique,
+   viewer bloqué par RLS + reçoit bien des 403 API, pas juste caché côté UI).
+2. Vérifier les numéros d'inscription : bien indépendants par organisation (deux orgs peuvent
+   toutes les deux avoir un élève n°1).
+3. Vérifier l'inscription publique par QR code : le nouveau format de token (`{organizationId, userId}`)
+   ET l'ancien format legacy (`{userId}` seul, pour les QR déjà imprimés) doivent tous les deux
+   fonctionner.
+4. Vérifier la marque (logo + signataires) par organisation en conditions réelles.
+5. **Recommandé, pas encore fait** : demander à l'utilisateur de se reconnecter avec son VRAI
+   compte Teacher Khati pour confirmer que rien n'a régressé après tous les fixes de cette
+   session — l'agent n'a testé qu'avec des comptes jetables, jamais avec les vraies données.
+6. Une fois tout validé : merger la PR, déployer, documenter (`MASTER_PROJECT.md` §16/§17,
+   mémoire persistante), puis écrire la migration `019` de nettoyage (drop `users.logo_url`,
+   drop les uniques `user_id` résiduels gardés pour la fenêtre de déploiement).
+
+**Si un problème difficile survient** (2-3 tentatives infructueuses) : consulter
+[`ERRORS/README.md`](ERRORS/README.md) avant de creuser à froid — un cas similaire a peut-être
+déjà été rencontré et documenté (SQL, isolation multi-tenant, méthodologie de test).
+
+---
 
 ## Pourquoi
 

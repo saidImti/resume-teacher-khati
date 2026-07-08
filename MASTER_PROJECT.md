@@ -3,8 +3,15 @@
 > **Document maître** — Toujours à jour. Mise à jour obligatoire avant toute implémentation majeure.
 > Dernière mise à jour : **2026-07-06** (v4.4 — Fix critique registre de présence : signature absente sur les pages de groupe intermédiaires (bloc rendu une seule fois après le dernier groupe au lieu d'être dupliqué par page). Voir §17 session 20 et §28.)
 
+> 🚧 **Chantier en cours (2026-07-07 → 08) — multi-tenant SaaS** : bascule vers une organisation
+> par école, sur la branche `feat/multi-tenant-saas` (pas encore mergée sur `main`). Voir
+> [`CHANTIER_MULTI_TENANT.md`](./CHANTIER_MULTI_TENANT.md) — section **« 🔖 REPRISE ICI »** en
+> tête du fichier pour l'état exact et la suite. Bugs rencontrés et corrigés pendant ce chantier
+> catalogués dans [`ERRORS/`](./ERRORS/README.md) (dossier créé le 2026-07-08, à consulter en
+> cas de blocage similaire avant de creuser à froid).
+
 > ✅ **Checkpoint de continuité (2026-07-06)** : tout le travail listé ci-dessous est **committé, poussé et déployé en production** (Vercel `success` sur chaque PR, dernier commit `main` @ `2110c7b`). Un redémarrage de poste ou une nouvelle session peut reprendre directement depuis ce document sans rien perdre — aucun travail local non sauvegardé. Seul `Signature Teacher Khati.png` (fichier personnel de l'utilisateur à la racine du projet) reste volontairement non commité — s'uploade désormais depuis `/settings/marque` (bouton **« Enregistrer ce signataire »**). **À noter** : à ce stade, ni le logo ni aucun signataire n'ont encore été réellement enregistrés en production (vérifié en base) — l'utilisateur doit encore réessayer l'upload une fois pour de vrai ; le fix du bouton (session 19) ET le fix de pagination des signatures (session 20) ont tous deux été validés via un compte de test jetable, pas encore avec les vraies données de l'utilisateur.
-> **Prochaine décision en attente** (pas encore tranchée) : parmi les points restants du bilan qualité (voir §16), attaquer soit **multi-utilisateurs/rôles**, soit un point secondaire (**listes d'attente**, **journal d'activité**). Voir §16 « Immédiat — Action requise ».
+> **Prochaine décision en attente** (pas encore tranchée) : parmi les points restants du bilan qualité (voir §16), attaquer soit **multi-utilisateurs/rôles**, soit un point secondaire (**listes d'attente**, **journal d'activité**). Voir §16 « Immédiat — Action requise ». ⚠️ Cette décision a depuis été prise : voir le chantier multi-tenant ci-dessus, qui répond directement à ce point.
 
 > ⚠️ **Projet de fusion en cours** : ce projet doit absorber `C:\AI-Businesses\Fiche Inscription Teacher Khati\` (dashboard HTML/localStorage qui gère en double une partie du périmètre élèves/tarification/paiements). Voir l'audit complet : [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) et §28 ci-dessous avant toute implémentation touchant Élèves, Finances, Présences ou Inscription publique.
 
