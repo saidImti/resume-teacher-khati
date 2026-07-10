@@ -509,3 +509,18 @@ Retour utilisateur (capture) : le registre s'imprimait bord à bord malgré `@pa
 Audit préalable (3 agents de recherche) : inventaire RLS exact des 26 tables, tous les points d'INSERT du code, conception validée. **4 bugs préexistants découverts au passage** (tous confirmés) : escalade de privilège (`withApiAuth` donnait le scope admin à toute session), `GET /api/users` listait toute l'instance Supabase, `PATCH /api/users/[id]` n'écrivait le rôle que dans user_metadata (aucun effet RLS), inscription publique QR cassée (`sites.user_id` inexistant — 42703 — et `/inscription` absent des routes publiques).
 
 **État : EN COURS sur la branche `feat/multi-tenant-saas`** (commit `3f972eb`, poussée). Fait : migration `018_organizations.sql` complète (**PAS APPLIQUÉE**), plomberie org (`with-api-auth`, `org.ts`, middleware, types), signup self-service, `/api/users` org-scopé, `branding.ts` au niveau org. Reste : appelants marque, routes de données, gating viewer, application 018, vérification E2E isolation, déploiement. **Tout le détail (architecture, pièges, ordre de reprise) : [`CHANTIER_MULTI_TENANT.md`](./CHANTIER_MULTI_TENANT.md) sur la branche.** ⚠️ Ne pas merger avant d'avoir appliqué le SQL.
+
+### 2026-07-08/09 — Multi-tenant : étapes 1-5 terminées, migration appliquée, E2E entamée (5 bugs corrigés)
+
+Étapes 1 à 5 du chantier terminées sur la branche (@ `7a4efc3`) : marque org-level (routes logo/signataires admin-only, Sidebar avec nom d'org, pages print), routes de données scopées `organization_id`, gating viewer côté UI, et **migration 018 APPLIQUÉE en base** — la base de prod est donc multi-tenant, le code déployé sur `main` restant l'ancien (compatibilité assurée par les triggers org-fill ; **ne pas inviter/créer de compte depuis la prod avant le merge**).
+
+La vérification E2E (étape 6, en cours) a débusqué et corrigé **5 bugs** — chacun documenté dans le nouveau dossier **`ERRORS/`** (catalogue symptôme/diagnostic/cause/solution avec sommaire) :
+1. Ordre de sections SQL cassant la migration (ERRORS/001).
+2. Trigger de signup `on_auth_user_created` absent en base — bug préexistant indépendant du chantier (ERRORS/002).
+3. Index unique non scopé bloquant le signup de toute 2ᵉ organisation (ERRORS/003).
+4. 🔴 **Fuite cross-tenant réelle** : `src/lib/supabase/queries.ts` + ~20 pages Server Component ne filtraient jamais par organisation — une org neuve voyait les données de Teacher Khati (ERRORS/004).
+5. 🔴 **Invitation cassée** : le trigger ne voit pas `app_metadata` à temps sur `admin.createUser` → l'invité créait sa propre org au lieu de rejoindre celle de l'admin ; corrigé côté `POST /api/users` (force le profil + nettoie l'org parasite) (ERRORS/007).
+
+**Validé en conditions réelles** (comptes jetables, login navigateur) : isolation (dashboard d'une org neuve = 0 partout) ; rôles (viewer : lecture seule UI **et** 403 API ; teacher : `201` sur l'écriture pédagogique, `403` sur les finances). Comptes et orgs de test nettoyés. `tsc` + `npm run build` verts.
+
+**Reste** (ordre dans « 🔖 REPRISE ICI » de `CHANTIER_MULTI_TENANT.md`) : numéros d'inscription par org · QR public nouveau format + legacy · marque par org en réel · **reconnexion de l'utilisateur avec son vrai compte** (zéro régression) · merge + déploiement + migration 019.
