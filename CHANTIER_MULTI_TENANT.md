@@ -1,7 +1,7 @@
 # CHANTIER — Multi-tenant SaaS (organizations)
 
 > **État : EN COURS — NE PAS MERGER SUR MAIN EN L'ÉTAT**
-> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-08**
+> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-10** (checkpoint de continuité — aucun changement de code depuis le 2026-07-09, `tsc` re-vérifié vert, tout est commité et poussé)
 > Migration `018_organizations.sql` : **✅ APPLIQUÉE** à la base (+ 2 correctifs post-application,
 > voir §6 et [ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md), [ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
 
@@ -123,7 +123,7 @@ Le plan complet approuvé est dans `C:\Users\saida\.claude\plans\recursive-glidi
 | `src/types/index.ts` | `Organization`, `UserRole` + viewer, `User.organization_id`. |
 | `src/app/auth/login/page.tsx` | Branding générique (plus de `getLogoUrlForSoleUser`), lien « Créer mon école ». |
 | `src/app/auth/signup/page.tsx` + `SignupForm.tsx` | Nouveau : signup self-service (école/nom/email/password → metadata `school_name`, gère le cas confirmation email activée). |
-| `src/app/api/users/route.ts` | GET membres de l'org uniquement ; POST invite via `app_metadata { organization_id, role }`, viewer accepté. |
+| `src/app/api/users/route.ts` | GET membres de l'org uniquement ; POST invite via `app_metadata { organization_id, role }`, viewer accepté. **Corrigé le 2026-07-09** : force le profil + nettoie toute org parasite après `createUser` (le trigger ne voit pas `app_metadata` à temps — [ERRORS/007](ERRORS/007-invite-app-metadata-race-condition-trigger.md)). |
 | `src/app/api/users/[id]/route.ts` | Vérif même-org (404 sinon), PATCH écrit `public.users.role` + full_name, interdiction de changer son propre rôle. |
 | `src/lib/branding.ts` | Org-level : `getLogoUrl(admin, organizationId)` lit `organizations.logo_url`, `getSignatories` filtre org, `getOrganizationName()` ajouté, chemins Storage `{orgId}/…`, `getLogoUrlForSoleUser` supprimé. |
 | `src/app/api/branding/logo/route.ts` | `getOrgContext()`, admin-only (403), upload `{orgId}/logo.*`, update `organizations.logo_url`, suppression de l'ancien fichier si l'extension change. |
