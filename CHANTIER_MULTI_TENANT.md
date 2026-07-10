@@ -7,23 +7,40 @@
 
 ## 🔖 REPRISE ICI (résumé condensé — lire ceci en premier dans une nouvelle session)
 
-**Ce qui vient d'être fait (2026-07-07 → 2026-07-08)** : étapes 1 à 5 du chantier terminées
+**Ce qui vient d'être fait (2026-07-07 → 2026-07-09)** : étapes 1 à 5 du chantier terminées
 (marque org-level, routes `/api/*` scopées, gating viewer UI, migration 018 appliquée).
-Étape 6 (vérification E2E) **en cours** — a débusqué et corrigé **4 bugs**, dont un critique :
+Étape 6 (vérification E2E) **en cours** — a débusqué et corrigé **5 bugs**, dont deux critiques :
 1. Migration cassée par un ordre de sections SQL → corrigé ([ERRORS/001](ERRORS/001-migration-fonction-sql-ordre-colonnes.md)).
 2. Trigger de signup absent en base (bug préexistant, indépendant du chantier) → corrigé ([ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md)).
 3. Index unique bloquant le signup de toute 2ᵉ organisation → corrigé ([ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
 4. 🔴 **Fuite cross-tenant réelle** : le dashboard (et ~20 autres pages) d'une organisation
    neuve affichait les données de Teacher Khati → corrigé en profondeur ([ERRORS/004](ERRORS/004-fuite-cross-tenant-queries-non-scopees.md)).
+5. 🔴 **Invitation d'un membre cassée** : un teacher/viewer invité devenait admin de sa
+   propre organisation neuve au lieu de rejoindre celle de l'admin invitant (le trigger ne
+   voit pas `app_metadata` à temps sur `admin.createUser`) → corrigé côté route
+   `POST /api/users` ([ERRORS/007](ERRORS/007-invite-app-metadata-race-condition-trigger.md)).
+
+**Étape 6, point 1 (rôles) : ✅ FAIT et vérifié en conditions réelles** (2026-07-09) —
+3 comptes réels (admin/teacher/viewer) créés dans la même org via le chemin d'invitation
+corrigé, login navigateur pour chacun :
+- **viewer** : sidebar affiche bien le badge « Lecture seule », actions de création
+  masquées côté UI, ET confirmé au niveau API (`fetch` direct) : `403 "Lecture seule"` sur
+  une route pédagogique, `403 "Réservé aux administrateurs"` sur une route finances — donc
+  pas qu'un masquage cosmétique.
+- **teacher** : écriture pédagogique réussie (`POST /api/groups` → `201`, groupe créé avec
+  le bon `organization_id`), bloqué sur action admin-only (`403` sur génération de factures).
+- Comptes + organisation de test nettoyés après vérification, base revenue à l'état initial.
+- **Reste mineur non bloquant** : le bouton « Nouveau cours » du header (pas dans
+  `DashboardContent`, géré séparément) n'est pas gated par rôle côté UI — RLS bloque quand
+  même l'écriture réelle en base, donc pas une faille de sécurité, juste un affichage à
+  améliorer un jour (bouton visible pour un viewer qui échouerait à la soumission).
 
 Isolation vérifiée en conditions réelles (login navigateur sur une org de test → dashboard
-à 0 partout). Comptes de test nettoyés, base revenue à l'état initial. Tout est commité et
-poussé sur `feat/multi-tenant-saas` (dernier commit : voir `git log`). `tsc --noEmit` et
-`npm run build` verts.
+à 0 partout). Tout est commité et poussé sur `feat/multi-tenant-saas` (dernier commit :
+voir `git log`). `tsc --noEmit` et `npm run build` verts.
 
-**Ce qu'il reste à faire (dans l'ordre)** — reprendre ici demain :
-1. Vérifier les rôles teacher/viewer en conditions réelles (teacher peut écrire le pédagogique,
-   viewer bloqué par RLS + reçoit bien des 403 API, pas juste caché côté UI).
+**Ce qu'il reste à faire (dans l'ordre)** — reprendre ici :
+1. ~~Vérifier les rôles teacher/viewer~~ — ✅ FAIT (voir ci-dessus).
 2. Vérifier les numéros d'inscription : bien indépendants par organisation (deux orgs peuvent
    toutes les deux avoir un élève n°1).
 3. Vérifier l'inscription publique par QR code : le nouveau format de token (`{organizationId, userId}`)

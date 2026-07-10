@@ -61,9 +61,17 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminSupabaseClient()
 
-  // organization_id dans app_metadata : posé UNIQUEMENT côté service-role,
-  // le trigger handle_new_user() rattache l'invité à l'org de l'admin.
+  // organization_id dans app_metadata : posé UNIQUEMENT côté service-role.
   // (user_metadata serait falsifiable par un client → jamais utilisé ici.)
+  //
+  // ⚠️ Le trigger handle_new_user() (AFTER INSERT ON auth.users) ne voit PAS
+  // fiablement cet app_metadata : l'API admin de Supabase semble insérer la
+  // ligne auth.users puis poser les métadonnées personnalisées dans une
+  // étape séparée — le trigger s'exécute donc parfois avec des métadonnées
+  // encore vides, retombe sur la branche self-service et crée une
+  // organisation parasite (rôle admin, nouvelle org). Constaté en vérif E2E
+  // (2026-07-09) : voir ERRORS/007. On ne peut donc pas faire confiance au
+  // trigger pour ce chemin — on force le profil et on nettoie après coup.
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password,
@@ -73,6 +81,38 @@ export async function POST(request: NextRequest) {
   })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+  const newUserId = data.user.id
+
+  const { data: profile } = await admin
+    .from('users')
+    .select('organization_id')
+    .eq('id', newUserId)
+    .maybeSingle()
+
+  // Organisation parasite créée par la branche self-service du trigger
+  // si celui-ci n'a pas vu organization_id à temps.
+  const strayOrgId = profile?.organization_id && profile.organization_id !== auth.organizationId
+    ? profile.organization_id
+    : null
+
+  const { error: fixError } = await admin
+    .from('users')
+    .update({ organization_id: auth.organizationId, role })
+    .eq('id', newUserId)
+
+  if (fixError) {
+    // Ne pas laisser un compte auth orphelin sans profil cohérent.
+    await admin.auth.admin.deleteUser(newUserId)
+    return NextResponse.json({ error: fixError.message }, { status: 500 })
+  }
+
+  if (strayOrgId) {
+    for (const table of ['levels', 'academic_years', 'sites', 'groups'] as const) {
+      await admin.from(table).delete().eq('organization_id', strayOrgId)
+    }
+    await admin.from('organizations').delete().eq('id', strayOrgId)
+  }
 
   return NextResponse.json({
     user: {

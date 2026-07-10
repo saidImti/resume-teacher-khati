@@ -19,6 +19,7 @@
 | 004 | Fuite cross-tenant : `queries.ts` et pages non scopées | 🔴 Critique | données d'une autre organisation visibles, dashboard qui affiche tout, client admin sans filtre | [004](004-fuite-cross-tenant-queries-non-scopees.md) |
 | 005 | Domaines email inventés rejetés par Supabase | Mineure | `email_address_invalid`, `example.com`, comptes de test signup | [005](005-domaines-email-invalides-supabase-signup.md) |
 | 006 | Scripts temporaires perturbent `next dev` | Mineure | Fast Refresh en rafale, test navigateur incohérent, `ERR_MODULE_NOT_FOUND` | [006](006-scripts-temporaires-perturbent-next-dev.md) |
+| 007 | Invitation d'un membre : trigger ne voit pas `app_metadata` à temps | 🔴 Critique | invité devient admin de sa propre org, `admin.createUser`, `app_metadata`, race condition | [007](007-invite-app-metadata-race-condition-trigger.md) |
 
 ## Par catégorie
 
@@ -26,7 +27,10 @@
 [002](002-trigger-auth-users-manquant.md), [003](003-index-unique-non-scope-organisation.md)
 
 **Isolation multi-tenant** : [003](003-index-unique-non-scope-organisation.md),
-[004](004-fuite-cross-tenant-queries-non-scopees.md)
+[004](004-fuite-cross-tenant-queries-non-scopees.md), [007](007-invite-app-metadata-race-condition-trigger.md)
+
+**Triggers `auth.users` / `app_metadata`** : [002](002-trigger-auth-users-manquant.md),
+[007](007-invite-app-metadata-race-condition-trigger.md)
 
 **Méthodologie de test / diagnostic** : [002](002-trigger-auth-users-manquant.md) (technique
 du scaffolding `EXCEPTION WHEN OTHERS` pour voir une vraie erreur SQL derrière un 500 opaque),
