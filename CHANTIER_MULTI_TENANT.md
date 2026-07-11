@@ -1,7 +1,7 @@
 # CHANTIER — Multi-tenant SaaS (organizations)
 
 > **État : EN COURS — NE PAS MERGER SUR MAIN EN L'ÉTAT**
-> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-10** (checkpoint de continuité — aucun changement de code depuis le 2026-07-09, `tsc` re-vérifié vert, tout est commité et poussé)
+> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-11** (étape 6 point 2 — numéros d'inscription — vérifiée en conditions réelles, aucun changement de code)
 > Migration `018_organizations.sql` : **✅ APPLIQUÉE** à la base (+ 2 correctifs post-application,
 > voir §6 et [ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md), [ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
 
@@ -41,8 +41,19 @@ voir `git log`). `tsc --noEmit` et `npm run build` verts.
 
 **Ce qu'il reste à faire (dans l'ordre)** — reprendre ici :
 1. ~~Vérifier les rôles teacher/viewer~~ — ✅ FAIT (voir ci-dessus).
-2. Vérifier les numéros d'inscription : bien indépendants par organisation (deux orgs peuvent
-   toutes les deux avoir un élève n°1).
+2. ~~Vérifier les numéros d'inscription~~ — ✅ FAIT et vérifié en conditions réelles
+   (2026-07-11) : 2 orgs de test (« Ecole Test Alpha », « Ecole Test Beta »), chacune avec
+   1 site sans préfixe configuré (fallback `99`) et 1 élève inscrit. Résultat : **les deux
+   ont reçu le numéro `99-00001`**, chacune indépendamment — le cas le plus strict possible
+   (même préfixe fallback des deux côtés ; l'isolation vient donc bien du scoping
+   `organization_id` dans le lock + le `MAX()` + l'index unique, pas d'une coïncidence de
+   préfixes différents). Comptes de test créés via `admin.createUser({ email_confirm: true })`
+   (voir [ERRORS/005](ERRORS/005-domaines-email-invalides-supabase-signup.md)) pour ne pas
+   épuiser le rate limit d'emails de `signUp()` — un premier essai via le vrai flux
+   self-service a d'ailleurs immédiatement heurté ce rate limit. Comptes + orgs de test
+   nettoyés après vérification (cascade auth user → profil/familles/élèves via `user_id`,
+   puis suppression explicite sites/levels/academic_years scopés org — ces tables n'ont pas
+   de `user_id` cascade —, puis suppression de l'organisation), base revenue à l'état initial.
 3. Vérifier l'inscription publique par QR code : le nouveau format de token (`{organizationId, userId}`)
    ET l'ancien format legacy (`{userId}` seul, pour les QR déjà imprimés) doivent tous les deux
    fonctionner.
