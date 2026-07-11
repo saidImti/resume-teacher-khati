@@ -360,7 +360,7 @@ export async function getStudents(supabase: SupabaseClient, organizationId: stri
 }) {
   let q = supabase
     .from('students')
-    .select('*, site:sites(*), level:levels(*), family:families(parent1_first,parent1_last,parent1_phone), enrollments(*, group:groups(*, level:levels(*), site:sites(*)))')
+    .select('*, site:sites(*), level:levels(*), family:families(id,parent1_first,parent1_last,parent1_phone), enrollments(*, group:groups(*, level:levels(*), site:sites(*)))')
     .eq('organization_id', organizationId)
     .order('last_name')
 
