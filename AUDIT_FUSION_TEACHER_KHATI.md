@@ -82,6 +82,14 @@ RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsA
 - L'UX de l'appel de présence groupé (si confirmée supérieure après comparaison du §4).
 - La logique de tarification proratisée pour les reçus PDF (départ en cours de mois) — à vérifier si `generate-monthly` de RTK la couvre déjà.
 - Le PDF de fiche d'inscription papier (`generate_fiche.py`) — utile en mode autonome pour salon/visite, pas besoin de migration, juste conservation en l'état.
+- ✅ **FAIT (2026-07-12)** — L'UX de « Nouvelle inscription » : page unique dynamique (parent saisi
+  une fois, enfants ajoutés à la volée, tarif dégressif visible en direct) plutôt que l'assistant
+  4-étapes-par-élève que RTK avait initialement. Portée dans `NewRegistrationForm.tsx`, branchée
+  sur le vrai `pricing_rules` de RTK (plus riche que le tableau figé du legacy : 5 paliers, 3 modes
+  de facturation). Amélioration au passage non présente dans le legacy : mode **Rentrée** qui
+  réinscrit un élève déjà connu sans dupliquer son dossier (le legacy recréait une inscription
+  complète chaque année ; RTK garde l'élève et ajoute juste une `enrollment`). Détail en session 21
+  de `MASTER_PROJECT.md`.
 
 ---
 
