@@ -24,6 +24,43 @@ const PricingRuleSchema = z.object({
   notes: z.string().max(1000).nullable().optional(),
 })
 
+export async function GET(request: NextRequest) {
+  try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+
+    const { searchParams } = new URL(request.url)
+    const siteId = searchParams.get('siteId')
+
+    const admin = createAdminSupabaseClient()
+    let query = admin
+      .from('pricing_rules')
+      .select('*')
+      .eq('organization_id', ctx.organizationId)
+      .eq('is_active', true)
+      .lte('effective_from', new Date().toISOString().slice(0, 10))
+      .order('effective_from', { ascending: false })
+
+    if (siteId) query = query.eq('site_id', siteId)
+
+    const { data, error } = await query
+    if (error) throw error
+
+    // Une seule regle active par site (la plus recente si plusieurs)
+    const bySite = new Map<string, (typeof data)[number]>()
+    for (const rule of data ?? []) {
+      if (!bySite.has(rule.site_id)) bySite.set(rule.site_id, rule)
+    }
+
+    return NextResponse.json(siteId ? (bySite.get(siteId) ?? null) : Array.from(bySite.values()))
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getOrgContext()
