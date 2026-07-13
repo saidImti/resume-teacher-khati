@@ -512,6 +512,11 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                       )}
                       {rule && rule.billing_type === 'monthly_family' && (
                         <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+                          {rule.price_1_child} € / mois / famille (forfait, quel que soit le nombre d&apos;enfants)
+                        </p>
+                      )}
+                      {rule && rule.billing_type === 'monthly_per_child' && (
+                        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
                           1 enfant: {rule.price_1_child} € · 2: {rule.price_2_children} € · 3: {rule.price_3_children} € / mois
                         </p>
                       )}
@@ -720,8 +725,8 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                         onChange={(e) => setPricingForm((current) => ({ ...current, billing_type: e.target.value as PricingRule['billing_type'] }))}
                         className={selectCls}
                       >
-                        <option value="monthly_family">Mensuel famille dégressif</option>
-                        <option value="monthly_per_child">Mensuel par enfant</option>
+                        <option value="monthly_per_child">Dégressif par enfant (selon la taille de la fratrie)</option>
+                        <option value="monthly_family">Forfait famille (montant fixe)</option>
                         <option value="per_session">Par séance</option>
                       </select>
                     </Field>
@@ -944,7 +949,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                                 </div>
                               )}
 
-                              {(rule.billing_type === 'monthly_family' || rule.billing_type === 'monthly_per_child') && (
+                              {rule.billing_type === 'monthly_per_child' && (
                                 <div className="grid grid-cols-5 gap-2 text-center">
                                   {[
                                     { n: '1 enf.', v: rule.price_1_child },
@@ -960,6 +965,14 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                                       </p>
                                     </div>
                                   ))}
+                                </div>
+                              )}
+
+                              {rule.billing_type === 'monthly_family' && (
+                                <div className="flex items-center gap-2">
+                                  <Euro className="h-4 w-4 text-emerald-600" />
+                                  <span className="text-lg font-bold text-emerald-700">{rule.price_1_child} €</span>
+                                  <span className="text-xs text-[var(--color-text-muted)]">/ mois / famille (forfait, quel que soit le nombre d&apos;enfants)</span>
                                 </div>
                               )}
 

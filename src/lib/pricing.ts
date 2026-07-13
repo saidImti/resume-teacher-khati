@@ -37,10 +37,10 @@ export function tierLabel(tierIndex: number): string {
 
 // Mensualite totale pour une famille de n enfants selon la regle du site,
 // hors tarif special (custom_monthly_rate, verifie a part car prioritaire).
-export function monthlyForFamily(rule: PricingRuleLike, childCount: number): number {
+export function monthlyForFamily(rule: PricingRuleLike, childCount: number, sessionsInMonth = 4): number {
   if (childCount <= 0) return 0
   if (rule.billing_type === 'per_session') {
-    return (rule.price_per_session ?? 0) * 4 * childCount
+    return (rule.price_per_session ?? 0) * sessionsInMonth * childCount
   }
   if (rule.billing_type === 'monthly_family') {
     return rule.price_1_child ?? 0

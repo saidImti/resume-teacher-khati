@@ -16,6 +16,7 @@ import type {
   Family, Student, Enrollment, Schedule,
   PricingRule, Invoice, Payment, StudentStats,
 } from '@/types'
+import { monthlyForFamily } from '@/lib/pricing'
 
 // ─── SITES ───────────────────────────────────────────────────
 
@@ -568,27 +569,17 @@ export async function upsertPricingRule(
 
 // ─── CALCUL DU MONTANT (helper) ───────────────────────────────
 
+// Delegue a src/lib/pricing.ts (seule source de verite, alignee sur
+// generate-monthly/route.ts) — voir ERRORS/ ou MASTER_PROJECT.md session 22 :
+// cette fonction traitait auparavant 'monthly_family' comme un degressif
+// multiplie par le nombre d'enfants, alors que la facturation reelle
+// applique un forfait fixe pour ce mode. Les deux divergeaient.
 export function computeMonthlyAmount(
   rule: PricingRule,
   nbActiveChildren: number,
   sessionsInMonth = 4
 ): number {
-  if (rule.billing_type === 'per_session') {
-    return (rule.price_per_session ?? 0) * nbActiveChildren * sessionsInMonth
-  }
-  if (rule.billing_type === 'monthly_family' || rule.billing_type === 'monthly_per_child') {
-    const rates: (number | null)[] = [
-      rule.price_1_child,
-      rule.price_2_children,
-      rule.price_3_children,
-      rule.price_4_children,
-      rule.price_5plus,
-    ]
-    const idx  = Math.min(nbActiveChildren - 1, 4)
-    const rate = rates[idx] ?? 0
-    return rate * nbActiveChildren
-  }
-  return 0
+  return monthlyForFamily(rule, nbActiveChildren, sessionsInMonth)
 }
 
 // ─── FACTURES ────────────────────────────────────────────────
