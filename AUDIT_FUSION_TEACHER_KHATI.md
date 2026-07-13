@@ -90,6 +90,13 @@ RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsA
   réinscrit un élève déjà connu sans dupliquer son dossier (le legacy recréait une inscription
   complète chaque année ; RTK garde l'élève et ajoute juste une `enrollment`). Détail en session 21
   de `MASTER_PROJECT.md`.
+- ✅ **FAIT (2026-07-14)** — L'UX de « Tarification par lieu » (§6/§8 legacy, jamais construite
+  ni côté legacy ni côté RTK malgré le calcul déjà présent des deux côtés) : page
+  `/settings/tarification`, 2 onglets (Par site / Par famille), édition inline, stats
+  familles/enfants/mensuel/annuel/%CA comme le legacy. Au passage, **bug critique corrigé** :
+  le formulaire d'inscription (session 21) calculait le dégressif comme un barème progressif
+  au lieu du tarif unique par taille de fratrie réellement appliqué par `generate-monthly` —
+  voir session 22 de `MASTER_PROJECT.md`.
 
 ---
 
