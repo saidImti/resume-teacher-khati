@@ -101,9 +101,10 @@ RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsA
   calcul (`computeMonthlyAmount` dans `queries.ts`, utilisée par Finances/registre
   familles/inscription publique) traitait encore le forfait famille comme un dégressif
   multiplié par le nombre d'enfants. Corrigée par délégation à la source de vérité unique
-  `lib/pricing.ts`. Voir session 23 de `MASTER_PROJECT.md`. **Point ouvert non tranché** :
-  `FinancesContent.tsx` a son propre CRUD `pricing_rules`/tarif spécial, qui fait doublon
-  avec `/settings/tarification` — à réconcilier avec l'utilisateur.
+  `lib/pricing.ts`. Voir session 23 de `MASTER_PROJECT.md`. **Duplication tranchée** : sur
+  demande explicite de l'utilisateur, le CRUD tarifs embarqué dans `FinancesContent.tsx` a
+  été retiré ; `/settings/tarification` est désormais la seule surface d'édition, Finances
+  n'affiche plus qu'une vue lecture seule + un lien vers la page dédiée.
 
 ---
 
