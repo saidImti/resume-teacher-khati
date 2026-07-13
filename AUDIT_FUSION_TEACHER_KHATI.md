@@ -97,6 +97,13 @@ RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsA
   le formulaire d'inscription (session 21) calculait le dégressif comme un barème progressif
   au lieu du tarif unique par taille de fratrie réellement appliqué par `generate-monthly` —
   voir session 22 de `MASTER_PROJECT.md`.
+- ✅ **FAIT (2026-07-14)** — Suite du fix précédent : une 4e implémentation divergente du même
+  calcul (`computeMonthlyAmount` dans `queries.ts`, utilisée par Finances/registre
+  familles/inscription publique) traitait encore le forfait famille comme un dégressif
+  multiplié par le nombre d'enfants. Corrigée par délégation à la source de vérité unique
+  `lib/pricing.ts`. Voir session 23 de `MASTER_PROJECT.md`. **Point ouvert non tranché** :
+  `FinancesContent.tsx` a son propre CRUD `pricing_rules`/tarif spécial, qui fait doublon
+  avec `/settings/tarification` — à réconcilier avec l'utilisateur.
 
 ---
 

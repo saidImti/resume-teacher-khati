@@ -5,10 +5,11 @@
 > Migration `018_organizations.sql` : **✅ APPLIQUÉE** à la base (+ 2 correctifs post-application,
 > voir §6 et [ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md), [ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
 >
-> ⚠️ **Hors-scope ajouté sur cette branche (2026-07-11/12)** : à la demande de l'utilisateur, du
+> ⚠️ **Hors-scope ajouté sur cette branche (2026-07-11 → 14)** : à la demande de l'utilisateur, du
 > travail de fusion legacy (code d'inscription par site + réécriture complète de la « Nouvelle
-> inscription » en formulaire dynamique multi-enfants) a été fait ICI plutôt que sur `main`, faute
-> d'avoir créé une branche dédiée. Détails : session 21 de `MASTER_PROJECT.md` et
+> inscription » en formulaire dynamique multi-enfants, page `/settings/tarification`, fix d'un bug
+> de calcul tarifaire dupliqué à 4 endroits) a été fait ICI plutôt que sur `main`, faute d'avoir
+> créé une branche dédiée. Détails : sessions 21-23 de `MASTER_PROJECT.md` et
 > [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) §5. **Ne pas confondre avec le
 > chantier multi-tenant lui-même** en relisant l'historique de commits de cette branche.
 
