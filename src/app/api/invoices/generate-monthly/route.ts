@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { getOrgContext } from '@/lib/org'
+import { monthlyForFamily, unitRateForFamilySize } from '@/lib/pricing'
 
 const Schema = z.object({
   month: z.number().int().min(1).max(12),
@@ -45,21 +46,6 @@ interface DBPricingRule {
   price_4_children:   number | null
   price_5plus:        number | null
   is_active: boolean
-}
-
-// ─── Calcul du montant pour N enfants (dégressif) ─────────────────────────────
-
-function priceForChildren(rule: DBPricingRule, n: number): number {
-  if (n <= 0) return 0
-  const tiers: (number | null)[] = [
-    rule.price_1_child,
-    rule.price_2_children,
-    rule.price_3_children,
-    rule.price_4_children,
-    rule.price_5plus,
-  ]
-  const pricePerChild = tiers[Math.min(n - 1, 4)] ?? rule.price_1_child ?? 0
-  return pricePerChild * n
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -189,9 +175,9 @@ export async function POST(req: NextRequest) {
         }
 
         if (rule.billing_type === 'monthly_per_child') {
-          const total = priceForChildren(rule, students.length)
+          const total = monthlyForFamily(rule, students.length)
           amountDue += total
-          const priceEach = students.length > 0 ? total / students.length : 0
+          const priceEach = unitRateForFamilySize(rule, students.length).unit
           for (const s of students) {
             lineItems.push({
               description: `Cours d'anglais — ${new Date(year, month - 1, 1).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}`,

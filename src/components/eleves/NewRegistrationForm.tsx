@@ -7,6 +7,7 @@ import {
   Check, Hash, Plus, Save, Search, Sparkles, Trash2,
 } from 'lucide-react'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { unitRateForFamilySize } from '@/lib/pricing'
 import type { AcademicYear, Level, Site, PricingRule, Group } from '@/types'
 
 type Mode = 'new' | 'existing' | 'renewal'
@@ -75,17 +76,6 @@ function levelForAge(levels: Level[], age: number | null): Level | null {
   if (age === null) return null
   return levels.find((l) => age >= l.age_min && age <= l.age_max) ?? null
 }
-
-// Reprend exactement priceForChildren de src/app/api/invoices/generate-monthly/route.ts
-function priceForChildren(rule: PricingRule, n: number): { unit: number; tierIndex: number } {
-  if (n <= 0) return { unit: 0, tierIndex: 0 }
-  const tiers = [rule.price_1_child, rule.price_2_children, rule.price_3_children, rule.price_4_children, rule.price_5plus]
-  const idx = Math.min(n - 1, 4)
-  const unit = tiers[idx] ?? rule.price_1_child ?? 0
-  return { unit, tierIndex: idx }
-}
-
-const TIER_LABELS = ['1er', '2e', '3e', '4e', '5e+']
 
 interface PricingItem { name: string; price: number | null; tag: string }
 interface PricingResult { mode: 'per_session' | 'monthly_per_child' | 'monthly_family' | 'special' | 'none'; items: PricingItem[]; month: number }
@@ -296,18 +286,18 @@ export function NewRegistrationForm({
         month: pricingRule.price_1_child ?? 0,
       }
     }
-    let month = 0
-    const items = activeNames.map((name, i) => {
-      const { unit, tierIndex } = priceForChildren(pricingRule, siblingOffset + i + 1)
-      month += unit
-      return { name, price: unit, tag: `${TIER_LABELS[tierIndex]} enfant` }
-    })
-    return { mode: 'monthly_per_child', items, month }
+    // Tarif degressif : PAS un bareme progressif — un tarif unique par enfant,
+    // determine par la taille totale de la fratrie (siblingOffset + nouveaux enfants).
+    // Une famille de 3 enfants paie 30€/enfant/mois pour CHACUN, soit 90€, pas 40+35+30.
+    const totalFamilySize = siblingOffset + activeNames.length
+    const { unit } = unitRateForFamilySize(pricingRule, totalFamilySize)
+    const items = activeNames.map((name) => ({ name, price: unit, tag: `${totalFamilySize} enfant${totalFamilySize > 1 ? 's' : ''}` }))
+    return { mode: 'monthly_per_child', items, month: unit * activeNames.length }
   }, [pricingRule, activeNames, specialOn, specialAmount, siblingOffset])
 
   const modeMeta: Record<PricingResult['mode'], { label: string; sub: string; color: string }> = {
     per_session: { label: 'Tarif par séance', sub: 'Estimé sur 4 séances / mois / enfant', color: '#f59e0b' },
-    monthly_per_child: { label: 'Dégressif standard', sub: 'Prix par enfant selon rang dans la fratrie', color: '#6366f1' },
+    monthly_per_child: { label: 'Dégressif standard', sub: 'Tarif par enfant selon la taille de la fratrie', color: '#6366f1' },
     monthly_family: { label: 'Forfait famille', sub: "Montant fixe, quel que soit le nombre d'enfants", color: '#8b5cf6' },
     special: { label: 'Tarif spécial famille', sub: 'Remplace le calcul standard — décision admin', color: '#10b981' },
     none: { label: 'Sélectionne un site', sub: '', color: '#8489a6' },
@@ -846,9 +836,9 @@ export function NewRegistrationForm({
                 <div className="text-[10px] text-muted-foreground">{meta.sub}</div>
               </div>
             </div>
-            {siblingOffset > 0 && (
+            {siblingOffset > 0 && pricing.mode === 'monthly_per_child' && (
               <p className="mb-2 text-[11px] text-muted-foreground">
-                Cette famille a déjà {siblingOffset} enfant{siblingOffset > 1 ? 's' : ''} — rang dégressif calculé à partir du {siblingOffset + 1}{siblingOffset + 1 === 1 ? 'er' : 'e'}.
+                Cette famille a déjà {siblingOffset} enfant{siblingOffset > 1 ? 's' : ''} — avec {activeNames.length} de plus, la fratrie passe à {siblingOffset + activeNames.length}, ce qui recalcule aussi le tarif des enfants déjà inscrits à la prochaine facture.
               </p>
             )}
             <div className="space-y-1.5">
