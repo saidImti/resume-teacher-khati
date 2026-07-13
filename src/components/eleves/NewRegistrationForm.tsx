@@ -40,6 +40,8 @@ interface ChildDraft {
   age: string
   gender: 'M' | 'F' | 'autre'
   jour: string
+  levelId: string
+  levelManual: boolean
   particularites: boolean
   medicalNote: string
   emergencyName: string
@@ -52,6 +54,7 @@ const DAY_LABELS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi',
 function emptyChild(uid: number): ChildDraft {
   return {
     uid, prenom: '', nom: '', dob: '', age: '', gender: 'M', jour: '',
+    levelId: '', levelManual: false,
     particularites: false, medicalNote: '', emergencyName: '', emergencyPhone: '', emergencyRelation: '',
   }
 }
@@ -242,8 +245,17 @@ export function NewRegistrationForm({
       const next = { ...c, ...patch }
       if (patch.dob !== undefined && patch.dob) next.age = String(ageFromDob(patch.dob) ?? '')
       if (patch.age !== undefined && patch.age) next.dob = dobFromAge(patch.age)
+      // Niveau auto-suggere tant que l'admin ne l'a pas change a la main
+      if ((patch.dob !== undefined || patch.age !== undefined) && !next.levelManual) {
+        const lvl = levelForAge(levels, ageFromDob(next.dob))
+        next.levelId = lvl?.id ?? ''
+      }
       return next
     }))
+  }
+
+  function setChildLevel(uid: number, levelId: string) {
+    setChildren((cur) => cur.map((c) => c.uid === uid ? { ...c, levelId, levelManual: true } : c))
   }
 
   function toggleRenewalStudent(id: string) {
@@ -329,6 +341,7 @@ export function NewRegistrationForm({
       submittingRef.current = true
       setSaving(true)
       try {
+        const supabase = getSupabaseBrowserClient()
         for (const s of toEnroll) {
           const res = await fetch('/api/enrollments', {
             method: 'POST',
@@ -337,6 +350,13 @@ export function NewRegistrationForm({
           })
           const data = await res.json()
           if (!res.ok) throw new Error(data.error ?? `Échec pour ${s.name}`)
+
+          // Le niveau "courant" de l'eleve (students.level_id, affiche partout dans l'app) doit
+          // suivre son age reel, pas rester fige sur son niveau de l'annee precedente.
+          const newLevel = levelForAge(levels, ageFromDob(s.date_of_birth ?? ''))
+          if (newLevel && newLevel.id !== s.level?.id) {
+            await supabase.from('students').update({ level_id: newLevel.id }).eq('id', s.id)
+          }
         }
         toast.success(`${toEnroll.length} élève${toEnroll.length > 1 ? 's' : ''} réinscrit${toEnroll.length > 1 ? 's' : ''}`)
         clearFamily()
@@ -399,8 +419,6 @@ export function NewRegistrationForm({
 
       let created = 0
       for (const c of validChildren) {
-        const age = ageFromDob(c.dob)
-        const lvl = levelForAge(levels, age)
         const { error: stuErr } = await supabase.from('students').insert({
           user_id: user.id,
           family_id: familyId,
@@ -409,7 +427,7 @@ export function NewRegistrationForm({
           date_of_birth: c.dob || null,
           gender: c.gender,
           site_id: siteId,
-          level_id: lvl?.id ?? null,
+          level_id: c.levelId || null,
           status: 'active',
           enrollment_date: registrationDate,
           medical_notes: c.medicalNote.trim() || null,
@@ -710,8 +728,7 @@ export function NewRegistrationForm({
             <>
               <div className="space-y-3">
                 {children.map((c, i) => {
-                  const age = ageFromDob(c.dob)
-                  const lvl = levelForAge(levels, age)
+                  const lvl = levels.find((l) => l.id === c.levelId) ?? null
                   return (
                     <div key={c.uid} className="rounded-lg border border-border bg-muted/30 p-3.5">
                       <div className="mb-2.5 flex items-center gap-2">
@@ -726,11 +743,28 @@ export function NewRegistrationForm({
                           </button>
                         )}
                       </div>
-                      <div className="grid gap-2.5 sm:grid-cols-5">
-                        <input value={c.prenom} onChange={(e) => updateChild(c.uid, { prenom: e.target.value })} placeholder="Prénom *" className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30 sm:col-span-1" />
+                      <div className="grid gap-2.5 sm:grid-cols-4">
+                        <input value={c.prenom} onChange={(e) => updateChild(c.uid, { prenom: e.target.value })} placeholder="Prénom *" className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
                         <input value={c.nom} onChange={(e) => updateChild(c.uid, { nom: e.target.value })} placeholder="Nom *" className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
                         <input type="number" min={1} max={18} value={c.age} onChange={(e) => updateChild(c.uid, { age: e.target.value })} placeholder="Âge" className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
                         <input type="date" value={c.dob} onChange={(e) => updateChild(c.uid, { dob: e.target.value })} className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                      </div>
+                      <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+                        <div>
+                          <select
+                            value={c.levelId}
+                            onChange={(e) => setChildLevel(c.uid, e.target.value)}
+                            className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                          >
+                            <option value="">Niveau — choisir</option>
+                            {levels.map((l) => (
+                              <option key={l.id} value={l.id}>{l.emoji} {l.name} ({l.age_min}-{l.age_max})</option>
+                            ))}
+                          </select>
+                          {!c.levelManual && c.levelId && (
+                            <p className="mt-1 text-[10px] text-muted-foreground">Suggéré selon l&apos;âge — modifiable</p>
+                          )}
+                        </div>
                         <input value={c.jour} onChange={(e) => updateChild(c.uid, { jour: e.target.value })} placeholder="Jour / créneau" className="rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30" />
                       </div>
                       <button
