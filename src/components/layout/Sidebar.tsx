@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import { useUIStore } from '@/store/ui'
 import { getSupabaseBrowserClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import type { OrgRole } from '@/lib/with-api-auth'
 
 const NAV_ITEMS = [
   { href: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
@@ -44,6 +45,14 @@ interface SidebarProps {
   userName?: string
   userEmail?: string
   logoUrl?: string | null
+  orgName?: string | null
+  role?: OrgRole
+}
+
+const ROLE_LABELS: Record<OrgRole, string> = {
+  admin: 'Admin',
+  teacher: 'Enseignant·e',
+  viewer: 'Lecture seule',
 }
 
 function NavItem({ item, pathname, sidebarOpen }: {
@@ -92,10 +101,16 @@ function NavItem({ item, pathname, sidebarOpen }: {
   )
 }
 
-export function Sidebar({ userName, userEmail, logoUrl }: SidebarProps) {
+export function Sidebar({ userName, userEmail, logoUrl, orgName, role }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { sidebarOpen, toggleSidebar } = useUIStore()
+
+  // Viewer : la config (années, fonctionnalités, mode test) est admin-only —
+  // ne garder que le hub Paramètres (profil, marque en lecture).
+  const navBottom = role === 'viewer'
+    ? NAV_BOTTOM.filter((item) => item.href === '/settings')
+    : NAV_BOTTOM
 
   async function handleLogout() {
     const supabase = getSupabaseBrowserClient()
@@ -139,7 +154,7 @@ export function Sidebar({ userName, userEmail, logoUrl }: SidebarProps) {
                 )}
               </div>
               <span className="font-semibold text-sm text-foreground leading-tight truncate">
-                Teacher Khati
+                {orgName ?? 'Mon école'}
               </span>
             </Link>
           )}
@@ -180,7 +195,7 @@ export function Sidebar({ userName, userEmail, logoUrl }: SidebarProps) {
             <p className="mt-4 mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">Système</p>
           )}
           {!sidebarOpen && <div className="my-2 border-t border-border mx-2" />}
-          {NAV_BOTTOM.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
+          {navBottom.map((item) => <NavItem key={item.href} item={item} pathname={pathname} sidebarOpen={sidebarOpen} />)}
         </nav>
 
         {/* Footer utilisateur */}
@@ -191,8 +206,13 @@ export function Sidebar({ userName, userEmail, logoUrl }: SidebarProps) {
                 {userName?.[0]?.toUpperCase() ?? 'K'}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {userName ?? 'Teacher Khati'}
+                <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <span className="truncate">{userName ?? 'Mon compte'}</span>
+                  {role && (
+                    <span className="shrink-0 rounded bg-primary/10 px-1 py-px text-[10px] font-medium text-primary">
+                      {ROLE_LABELS[role]}
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground truncate">{userEmail ?? ''}</p>
               </div>

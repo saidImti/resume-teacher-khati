@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
@@ -172,6 +172,10 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
   const router = useRouter()
   const [form, setForm] = useState<FormData>(student ? formFromStudent(student) : INIT)
   const [saving, setSaving] = useState(false)
+  // Verrou synchrone : le state React (saving) est batch/async, donc plusieurs clics
+  // survenant dans le meme tick passeraient tous avant le premier re-rendu qui desactive
+  // le bouton. Ce ref est lu/ecrit de facon synchrone et bloque des le premier appel.
+  const submittingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [section, setSection] = useState<SectionId>('identity')
   const [registrationLink, setRegistrationLink] = useState<string | null>(null)
@@ -253,6 +257,8 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
       setSection(!form.first_name || !form.last_name ? 'identity' : 'school')
       return
     }
+    if (submittingRef.current) return
+    submittingRef.current = true
 
     setSaving(true)
     setError(null)
@@ -309,16 +315,24 @@ export function StudentForm({ mode, sites, levels, existingFamilies, student }: 
       if (mode === 'create') {
         const { data: savedStudent, error: studentErr } = await supabase.from('students').insert(payload).select().single()
         if (studentErr) throw studentErr
+        // Ne pas remettre saving a false ici : router.push() est asynchrone et ne demonte
+        // pas immediatement ce formulaire, donc rearmer le bouton avant la navigation
+        // laisse une fenetre ou un double-clic resoumet et cree une famille en double
+        // (chacune avec son propre numero d'inscription).
         router.push(`/eleves/${savedStudent.id}`)
+        return
       } else if (student) {
         const { error: studentErr } = await supabase.from('students').update(payload).eq('id', student.id)
         if (studentErr) throw studentErr
         router.push(`/eleves/${student.id}`)
+        return
       }
+      setSaving(false)
+      submittingRef.current = false
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur lors de la sauvegarde')
-    } finally {
       setSaving(false)
+      submittingRef.current = false
     }
   }
 

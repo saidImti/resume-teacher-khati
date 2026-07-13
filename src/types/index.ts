@@ -21,6 +21,7 @@ export interface Site {
   address: string | null
   color: string
   is_active: boolean
+  registration_prefix: number | null
   created_at: string
   updated_at: string
 }
@@ -220,9 +221,20 @@ export interface WhatsAppSend {
   updated_at: string
 }
 
+// ─── ORGANISATIONS (multi-tenant) ────────────────────────────
+
+export interface Organization {
+  id: string
+  name: string
+  slug: string | null
+  logo_url: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ─── UTILISATEURS ────────────────────────────────────────────
 
-export type UserRole = 'admin' | 'teacher'
+export type UserRole = 'admin' | 'teacher' | 'viewer'
 
 export interface UserPreferences {
   theme?: 'light' | 'dark' | 'system'
@@ -232,6 +244,7 @@ export interface UserPreferences {
 
 export interface User {
   id: string
+  organization_id: string
   full_name: string | null
   role: UserRole
   site_ids: string[]
@@ -241,6 +254,7 @@ export interface User {
   updated_at: string
   // Relations
   sites?: Site[]
+  organization?: Organization
 }
 
 // ─── STATISTIQUES ────────────────────────────────────────────

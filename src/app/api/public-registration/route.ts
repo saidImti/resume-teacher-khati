@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAdminSupabaseClient } from '@/lib/supabase/server'
 import { verifyRegistrationToken } from '@/lib/registration-token'
+import { resolveRegistrationOrgId } from '@/lib/org'
+import { getOrganizationName } from '@/lib/branding'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import { formatRegistrationNumber } from '@/lib/utils'
 import type { Family, PricingRule } from '@/types'
@@ -68,19 +70,22 @@ export async function POST(request: Request) {
   const payload = verifyRegistrationToken(parsed.data.token)
   if (!payload) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 401 })
 
+  const organizationId = await resolveRegistrationOrgId(payload)
+  if (!organizationId) return NextResponse.json({ error: 'Lien invalide ou expiré' }, { status: 401 })
+
   const admin = createAdminSupabaseClient()
   const { student, family } = parsed.data
 
-  const [{ data: site }, { data: level }, { data: families }, { data: pricingRule }] = await Promise.all([
-    admin.from('sites').select('*').eq('id', student.site_id).eq('user_id', payload.userId).single(),
+  const [{ data: site }, { data: level }, { data: families }, { data: pricingRule }, orgName] = await Promise.all([
+    admin.from('sites').select('*').eq('id', student.site_id).eq('organization_id', organizationId).single(),
     student.level_id
-      ? admin.from('levels').select('*').eq('id', student.level_id).single()
+      ? admin.from('levels').select('*').eq('id', student.level_id).eq('organization_id', organizationId).single()
       : Promise.resolve({ data: null }),
-    admin.from('families').select('*').eq('user_id', payload.userId),
+    admin.from('families').select('*').eq('organization_id', organizationId),
     admin
       .from('pricing_rules')
       .select('*, site:sites(*)')
-      .eq('user_id', payload.userId)
+      .eq('organization_id', organizationId)
       .eq('site_id', student.site_id)
       .eq('is_active', true)
       .lte('effective_from', new Date().toISOString().split('T')[0])
@@ -88,9 +93,12 @@ export async function POST(request: Request) {
       .order('effective_from', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    getOrganizationName(admin, organizationId).catch(() => null),
   ])
 
   if (!site) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
+
+  const schoolName = orgName ?? 'l’école'
 
   const normalizedPhone = family.parent1_phone.replace(/\s+/g, ' ').trim()
   const normalizedEmail = family.parent1_email?.toLowerCase().trim()
@@ -107,6 +115,8 @@ export async function POST(request: Request) {
     const { data: createdFamily, error: familyError } = await admin
       .from('families')
       .insert({
+        organization_id: organizationId,
+        // user_id NOT NULL jusqu'à la migration 019 — émetteur du QR
         user_id: payload.userId,
         parent1_first: family.parent1_first,
         parent1_last: family.parent1_last,
@@ -133,6 +143,7 @@ export async function POST(request: Request) {
   const { data: savedStudent, error: studentError } = await admin
     .from('students')
     .insert({
+      organization_id: organizationId,
       user_id: payload.userId,
       family_id: familyId,
       first_name: student.first_name,
@@ -163,7 +174,7 @@ export async function POST(request: Request) {
     ? `Tarif personnalisé famille : ${Number(customRate).toFixed(2)} €/mois.`
     : normalAmount
       ? `Tarif indicatif du site : ${normalAmount.toFixed(2)} €/mois.`
-      : 'Tarif à confirmer par Teacher Khati.'
+      : `Tarif à confirmer par ${schoolName}.`
 
   const registrationNumber = familyRecord?.registration_number
     ? formatRegistrationNumber(familyRecord.registration_number)
@@ -176,7 +187,7 @@ export async function POST(request: Request) {
     `Site demandé : ${site.name}.`,
     level ? `Niveau : ${level.emoji ?? ''} ${level.name}.` : null,
     tariffText,
-    'Teacher Khati vous recontactera pour confirmer le créneau, le tarif final et les prochaines étapes.',
+    `${schoolName} vous recontactera pour confirmer le créneau, le tarif final et les prochaines étapes.`,
   ].filter(Boolean).join('\n')
 
   const adminMessage = [

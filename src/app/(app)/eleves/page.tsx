@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import {
   getFamilies,
   getInvoices,
@@ -14,9 +15,9 @@ import { ElevesContent } from '@/components/eleves/ElevesContent'
 export const metadata: Metadata = { title: 'Élèves' }
 
 export default async function ElevesPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
   const admin = createAdminSupabaseClient()
 
   const now = new Date()
@@ -24,12 +25,12 @@ export default async function ElevesPage() {
   const currentYear = now.getFullYear()
 
   const [sites, students, stats, families, pricingRules, invoices] = await Promise.all([
-    getSites(admin),
-    getStudents(admin).catch(() => []),
-    getStudentStats(admin).catch(() => null),
-    getFamilies(admin).catch(() => []),
-    getPricingRules(admin).catch(() => []),
-    getInvoices(admin).catch(() => []),
+    getSites(admin, orgId),
+    getStudents(admin, orgId).catch(() => []),
+    getStudentStats(admin, orgId).catch(() => null),
+    getFamilies(admin, orgId).catch(() => []),
+    getPricingRules(admin, orgId).catch(() => []),
+    getInvoices(admin, orgId).catch(() => []),
   ])
 
   return (

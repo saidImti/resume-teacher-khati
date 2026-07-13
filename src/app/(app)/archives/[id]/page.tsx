@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { Header } from '@/components/layout/Header'
 import { ResumeDetailClient } from '@/components/archives/ResumeDetailClient'
 import { SortableSectionList } from '@/components/resume/SortableSectionList'
@@ -43,8 +44,8 @@ interface PageProps {
 
 export default async function ResumeDetailPage({ params }: PageProps) {
   const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const { id } = await params
 
@@ -64,6 +65,7 @@ export default async function ResumeDetailPage({ params }: PageProps) {
         id, title, content_text, type, sort_order
       )
     `)
+    .eq('organization_id', ctx.organizationId)
     .eq('id', id)
     .single()
 

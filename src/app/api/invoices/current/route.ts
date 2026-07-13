@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const InvoiceSchema = z.object({
   family_id: z.string().uuid(),
@@ -12,9 +13,10 @@ const InvoiceSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  // Finances : admin uniquement (matrice RLS)
+  if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
   const parsed = InvoiceSchema.safeParse(await request.json())
   if (!parsed.success) {
@@ -25,10 +27,10 @@ export async function POST(request: NextRequest) {
   const payload = parsed.data
   const { data: family, error: familyError } = await admin
     .from('families')
-    .select('user_id')
+    .select('organization_id')
     .eq('id', payload.family_id)
     .single()
-  if (familyError || !family) {
+  if (familyError || !family || family.organization_id !== ctx.organizationId) {
     return NextResponse.json({ error: 'Famille introuvable' }, { status: 404 })
   }
 
@@ -67,7 +69,9 @@ export async function POST(request: NextRequest) {
   const { data, error } = await admin
     .from('invoices')
     .insert({
-      user_id: family.user_id,
+      organization_id: ctx.organizationId,
+      // user_id NOT NULL jusqu'à la migration 019
+      user_id: ctx.user.id,
       family_id: payload.family_id,
       site_id: payload.site_id,
       period_month: payload.period_month,

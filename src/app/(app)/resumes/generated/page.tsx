@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { Header } from '@/components/layout/Header'
 import { GeneratedResumesBoard, type GeneratedResume } from '@/components/resume/GeneratedResumesBoard'
 
@@ -8,9 +9,8 @@ interface PageProps {
 }
 
 export default async function GeneratedResumesPage({ searchParams }: PageProps) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   const params = await searchParams
   const ids = (params.ids ?? '')
@@ -46,6 +46,7 @@ export default async function GeneratedResumesPage({ searchParams }: PageProps) 
       ),
       sections:resume_sections(id, title, content_text, type, sort_order)
     `)
+    .eq('organization_id', ctx.organizationId)
     .in('id', ids)
 
   const resumes = ((data ?? []) as unknown as GeneratedResume[])

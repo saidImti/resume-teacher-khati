@@ -5,20 +5,27 @@
  *   2. Header X-API-Key: rtk_xxx → usage externe (n8n, Make, Zapier...)
  *   3. Header Authorization: Bearer rtk_xxx → idem
  *
+ * Multi-tenant : résout aussi l'organisation et le rôle de l'appelant.
+ * Les scopes de session dérivent du rôle en base (public.users.role) —
+ * jamais « admin » par défaut (un viewer ne doit pas pouvoir écrire).
+ *
  * Usage dans une route :
  *   const auth = await withApiAuth(request)
  *   if (!auth.ok) return auth.response
- *   const { userId, scopes } = auth
+ *   const { userId, organizationId, role, scopes } = auth
  */
 import { type NextRequest, NextResponse } from 'next/server'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server'
 import { validateApiKey, hasScope } from '@/lib/api-key'
 
 type Scope = 'read' | 'write' | 'admin'
+export type OrgRole = 'admin' | 'teacher' | 'viewer'
 
 type AuthSuccess = {
   ok: true
   userId: string
+  organizationId: string
+  role: OrgRole
   scopes: string[]
   via: 'session' | 'api-key'
   hasScope: (s: Scope) => boolean
@@ -27,6 +34,26 @@ type AuthSuccess = {
 type AuthFailure = {
   ok: false
   response: NextResponse
+}
+
+const SCOPES_BY_ROLE: Record<OrgRole, string[]> = {
+  admin: ['read', 'write', 'admin'],
+  teacher: ['read', 'write'],
+  viewer: ['read'],
+}
+
+async function resolveOrgAndRole(userId: string): Promise<{ organizationId: string; role: OrgRole } | null> {
+  const admin = createAdminSupabaseClient()
+  const { data } = await admin
+    .from('users')
+    .select('organization_id, role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (!data?.organization_id) return null
+  const role: OrgRole = data.role === 'admin' || data.role === 'teacher' || data.role === 'viewer'
+    ? data.role
+    : 'viewer'
+  return { organizationId: data.organization_id, role }
 }
 
 export async function withApiAuth(
@@ -53,7 +80,21 @@ export async function withApiAuth(
       }
     }
 
-    const scopes = result.scopes ?? ['read']
+    const org = await resolveOrgAndRole(result.userId!)
+    if (!org) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: 'Utilisateur sans organisation' },
+          { status: 403 }
+        ),
+      }
+    }
+
+    // Les scopes de la clé sont plafonnés par le rôle réel de son propriétaire
+    const keyScopes = result.scopes ?? ['read']
+    const roleScopes = SCOPES_BY_ROLE[org.role]
+    const scopes = keyScopes.filter((s) => roleScopes.includes(s))
 
     if (!hasScope(scopes, requiredScope)) {
       return {
@@ -68,6 +109,8 @@ export async function withApiAuth(
     return {
       ok: true,
       userId: result.userId!,
+      organizationId: org.organizationId,
+      role: org.role,
       scopes,
       via: 'api-key',
       hasScope: (s) => hasScope(scopes, s),
@@ -89,12 +132,37 @@ export async function withApiAuth(
       }
     }
 
+    const org = await resolveOrgAndRole(user.id)
+    if (!org) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: 'Utilisateur sans organisation' },
+          { status: 403 }
+        ),
+      }
+    }
+
+    const scopes = SCOPES_BY_ROLE[org.role]
+
+    if (!hasScope(scopes, requiredScope)) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          { error: `Accès refusé : rôle « ${org.role} » insuffisant (requis : ${requiredScope})` },
+          { status: 403 }
+        ),
+      }
+    }
+
     return {
       ok: true,
       userId: user.id,
-      scopes: ['admin'],
+      organizationId: org.organizationId,
+      role: org.role,
+      scopes,
       via: 'session',
-      hasScope: () => true,   // session = tous les droits
+      hasScope: (s) => hasScope(scopes, s),
     }
   } catch {
     return {

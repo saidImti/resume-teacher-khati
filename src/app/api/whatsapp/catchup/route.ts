@@ -5,7 +5,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
+import { getOrganizationName } from '@/lib/branding'
 import { sendWhatsAppMessage, normalizePhoneNumber } from '@/lib/whatsapp/send'
 import { formatResumeForWhatsApp } from '@/lib/whatsapp/formatter'
 
@@ -14,9 +16,9 @@ const Schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  if (ctx.role === 'viewer') return NextResponse.json({ error: 'Lecture seule' }, { status: 403 })
 
   const body = await req.json().catch(() => null)
   const parsed = Schema.safeParse(body)
@@ -27,21 +29,26 @@ export async function POST(req: NextRequest) {
   const { sessionId } = parsed.data
   const admin = createAdminSupabaseClient()
 
-  // ── 1. Paramètres WhatsApp de l'utilisateur ──────────────────────────────
-  const { data: waSettings } = await admin
-    .from('whatsapp_settings')
-    .select('test_mode, test_number, production_number')
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // ── 1. Paramètres WhatsApp + nom de l'école ───────────────────────────────
+  const [{ data: waSettings }, orgName] = await Promise.all([
+    admin
+      .from('whatsapp_settings')
+      .select('test_mode, test_number, production_number')
+      .eq('organization_id', ctx.organizationId)
+      .maybeSingle(),
+    getOrganizationName(admin, ctx.organizationId).catch(() => null),
+  ])
 
   const testMode   = waSettings?.test_mode ?? true
   const testNumber = normalizePhoneNumber(waSettings?.test_number)
+  const schoolName = orgName ?? 'votre école'
 
   // ── 2. Session + groupe + level ───────────────────────────────────────────
   const { data: session, error: sessErr } = await admin
     .from('sessions')
     .select('id, session_date, group:groups(id, name, level:levels(id, name, emoji, color))')
     .eq('id', sessionId)
+    .eq('organization_id', ctx.organizationId)
     .single()
 
   if (sessErr || !session) {
@@ -62,7 +69,7 @@ export async function POST(req: NextRequest) {
     `)
     .eq('session_id', sessionId)
     .in('status', ['absent', 'excused'])
-    .eq('user_id', user.id)
+    .eq('organization_id', ctx.organizationId)
 
   if (absErr) return NextResponse.json({ error: absErr.message }, { status: 500 })
   if (!absents || absents.length === 0) {
@@ -135,7 +142,7 @@ export async function POST(req: NextRequest) {
     if (courseText) {
       message = `👋 *Bonjour ${parentFirst},*\n\n${studentName} était absent(e) lors du cours du ${dateStr}.\n\nVoici le contenu du cours pour qu'il/elle puisse rattraper :\n\n${courseText}`
     } else {
-      message = `👋 *Bonjour ${parentFirst},*\n\n${studentName} était absent(e) lors du cours d'anglais du ${dateStr}.\n\nLe résumé du cours sera disponible prochainement sur l'application Teacher Khati.\n\n📚 À bientôt !`
+      message = `👋 *Bonjour ${parentFirst},*\n\n${studentName} était absent(e) lors du cours du ${dateStr}.\n\nLe résumé du cours sera disponible prochainement auprès de ${schoolName}.\n\n📚 À bientôt !`
     }
 
     const sendResult = await sendWhatsAppMessage(parentPhone, message)

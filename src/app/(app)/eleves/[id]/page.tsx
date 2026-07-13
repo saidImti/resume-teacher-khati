@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { getStudentById, getEnrollmentsByStudent, getInvoices, getPaymentsByFamily } from '@/lib/supabase/queries'
 import { StudentProfile } from '@/components/eleves/StudentProfile'
 
@@ -10,26 +11,27 @@ interface Props { params: Promise<{ id: string }> }
 
 export default async function StudentPage({ params }: Props) {
   const { id } = await params
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
+  const orgId = ctx.organizationId
   const admin = createAdminSupabaseClient()
 
   let student
   try {
-    student = await getStudentById(admin, id)
+    student = await getStudentById(admin, orgId, id)
   } catch {
     notFound()
   }
 
   const [enrollments, payments, invoices, { data: groups }, { data: attendance }] = await Promise.all([
-    getEnrollmentsByStudent(admin, id),
-    student.family_id ? getPaymentsByFamily(admin, student.family_id) : Promise.resolve([]),
-    student.family_id ? getInvoices(admin, { familyId: student.family_id }) : Promise.resolve([]),
-    admin.from('groups').select('id, name, level:levels(name, emoji), site:sites(name)').eq('is_active', true).order('name'),
+    getEnrollmentsByStudent(admin, orgId, id),
+    student.family_id ? getPaymentsByFamily(admin, orgId, student.family_id) : Promise.resolve([]),
+    student.family_id ? getInvoices(admin, orgId, { familyId: student.family_id }) : Promise.resolve([]),
+    admin.from('groups').select('id, name, level:levels(name, emoji), site:sites(name)').eq('organization_id', orgId).eq('is_active', true).order('name'),
     admin
       .from('attendance')
       .select('id, status, notes, marked_at, session:sessions(id, session_date, group:groups(name, level:levels(name, emoji, color)))')
+      .eq('organization_id', orgId)
       .eq('student_id', id),
   ])
 

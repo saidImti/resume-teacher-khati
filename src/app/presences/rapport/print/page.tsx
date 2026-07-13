@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { buildAttendanceReport } from '@/lib/attendance-report'
 import { getLogoUrl, getSignatories } from '@/lib/branding'
 import { PrintAttendanceClient } from '@/components/presences/PrintAttendanceClient'
@@ -11,9 +12,8 @@ interface PageProps {
 export default async function PrintAttendancePage({ searchParams }: PageProps) {
   const { from, to, siteId, groupId } = await searchParams
 
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
 
   if (!from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
     redirect('/presences')
@@ -21,11 +21,11 @@ export default async function PrintAttendancePage({ searchParams }: PageProps) {
 
   const admin = createAdminSupabaseClient()
   const [report, { data: site }, { data: group }, logoUrl, signatories] = await Promise.all([
-    buildAttendanceReport(admin, { userId: user.id, from, to, siteId, groupId }),
-    siteId ? admin.from('sites').select('name').eq('id', siteId).single() : Promise.resolve({ data: null }),
-    groupId ? admin.from('groups').select('name, level:levels(emoji)').eq('id', groupId).single() : Promise.resolve({ data: null }),
-    getLogoUrl(admin, user.id).catch(() => null),
-    getSignatories(admin, user.id).catch(() => []),
+    buildAttendanceReport(admin, { organizationId: ctx.organizationId, from, to, siteId, groupId }),
+    siteId ? admin.from('sites').select('name').eq('organization_id', ctx.organizationId).eq('id', siteId).single() : Promise.resolve({ data: null }),
+    groupId ? admin.from('groups').select('name, level:levels(emoji)').eq('organization_id', ctx.organizationId).eq('id', groupId).single() : Promise.resolve({ data: null }),
+    getLogoUrl(admin, ctx.organizationId).catch(() => null),
+    getSignatories(admin, ctx.organizationId).catch(() => []),
   ])
 
   return (

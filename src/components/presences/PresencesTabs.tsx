@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { AttendanceClient } from './AttendanceClient'
 import { AttendanceRegister } from './AttendanceRegister'
 import { DailyCall } from './DailyCall'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 import type { Site } from '@/types'
 
 interface GroupOption {
@@ -27,12 +28,16 @@ const TABS = [
 ]
 
 export function PresencesTabs({ groups, sites }: Props) {
-  const [tab, setTab] = useState<'jour' | 'appel' | 'registre'>('jour')
+  // Viewer : l'appel (du jour ou par groupe) écrit des sessions/présences —
+  // seule la fiche de présence (lecture) reste accessible.
+  const { canWrite } = useOrgRole()
+  const tabs = canWrite ? TABS : TABS.filter(({ key }) => key === 'registre')
+  const [tab, setTab] = useState<'jour' | 'appel' | 'registre'>(canWrite ? 'jour' : 'registre')
 
   return (
     <div className="space-y-6">
       <div className="mx-auto flex max-w-4xl gap-1 rounded-xl border border-border bg-card p-1">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {tabs.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"

@@ -9,6 +9,7 @@ import {
 import { cn } from '@/lib/utils'
 import { FadeIn } from '@/components/ui/FadeIn'
 import { buildSchoolRegister } from '@/lib/school-register'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 import type { Family, Invoice, PricingRule, Site, Student, StudentStatus } from '@/types'
 
 interface Props {
@@ -43,6 +44,8 @@ const MONTH_STATUS_CONFIG: Record<MonthStatus, { label: string; chip: string; do
 export function FamiliesPaymentsContent({
   sites, students, families, pricingRules, invoices, currentMonth, currentYear,
 }: Props) {
+  // Paiements = admin ; archivage famille = admin+teacher (matrice RLS)
+  const { canWrite, isAdmin } = useOrgRole()
   const [localStudents, setLocalStudents] = useState(students)
   const [localFamilies, setLocalFamilies] = useState(families)
   const [localInvoices, setLocalInvoices] = useState(invoices)
@@ -228,24 +231,28 @@ export function FamiliesPaymentsContent({
                 <option value="all">Tous les sites</option>
                 {sites.map(site => <option key={site.id} value={site.id}>{site.name}</option>)}
               </select>
-              <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1">
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={event => setSelectedIds(event.target.checked ? rows.map(row => row.id) : [])}
-                    aria-label="Tout sélectionner"
-                  />
-                  Tout ({selectedRows.length})
-                </label>
-              </div>
-              <select value={bulkPeriod} onChange={event => setBulkPeriod(event.target.value)} className={inputCls} aria-label="Mois de l'action collective">
-                {academicMonths.map(period => <option key={`${period.year}-${period.month}`} value={`${period.year}-${String(period.month).padStart(2, '0')}`}>{MONTHS[period.month - 1]} {period.year}</option>)}
-              </select>
-              <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('paid')} className="btn-press rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-40">Payé</button>
-              <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('pending')} className="btn-press rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-40">À payer</button>
-              <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('overdue')} className="btn-press rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-40">Retard</button>
-              {saving && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+              {isAdmin && (
+                <>
+                  <div className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1">
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={event => setSelectedIds(event.target.checked ? rows.map(row => row.id) : [])}
+                        aria-label="Tout sélectionner"
+                      />
+                      Tout ({selectedRows.length})
+                    </label>
+                  </div>
+                  <select value={bulkPeriod} onChange={event => setBulkPeriod(event.target.value)} className={inputCls} aria-label="Mois de l'action collective">
+                    {academicMonths.map(period => <option key={`${period.year}-${period.month}`} value={`${period.year}-${String(period.month).padStart(2, '0')}`}>{MONTHS[period.month - 1]} {period.year}</option>)}
+                  </select>
+                  <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('paid')} className="btn-press rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-40">Payé</button>
+                  <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('pending')} className="btn-press rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-amber-600 disabled:opacity-40">À payer</button>
+                  <button disabled={!selectedRows.length || saving} onClick={() => bulkAction('overdue')} className="btn-press rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:opacity-40">Retard</button>
+                  {saving && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                </>
+              )}
             </div>
           </section>
         </FadeIn>
@@ -401,15 +408,17 @@ export function FamiliesPaymentsContent({
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
                         <p className="text-xs text-muted-foreground">{row.parentPhone || 'Sans téléphone'}</p>
                         <div className="flex flex-wrap gap-2">
-                          <button disabled={!row.family} onClick={() => setEditingFamilyId(row.id)} className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:opacity-40">
-                            <BadgeEuro className="h-3.5 w-3.5" /> Modifier le tarif
-                          </button>
+                          {isAdmin && (
+                            <button disabled={!row.family} onClick={() => setEditingFamilyId(row.id)} className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-accent disabled:opacity-40">
+                              <BadgeEuro className="h-3.5 w-3.5" /> Modifier le tarif
+                            </button>
+                          )}
                           {row.students[0] && (
                             <Link href={`/eleves/${row.students[0].id}`} className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-accent">
                               Dossier élève <ChevronRight className="h-3.5 w-3.5" />
                             </Link>
                           )}
-                          {row.family && (
+                          {row.family && canWrite && (
                             <button onClick={() => archiveFamily(row.family!)} className="btn-press inline-flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30">
                               <Archive className="h-3.5 w-3.5" /> Archiver
                             </button>

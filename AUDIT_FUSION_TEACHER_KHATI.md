@@ -82,6 +82,29 @@ RTK a un statut de présence plus riche (4 états vs 2) et l'intégration WhatsA
 - L'UX de l'appel de présence groupé (si confirmée supérieure après comparaison du §4).
 - La logique de tarification proratisée pour les reçus PDF (départ en cours de mois) — à vérifier si `generate-monthly` de RTK la couvre déjà.
 - Le PDF de fiche d'inscription papier (`generate_fiche.py`) — utile en mode autonome pour salon/visite, pas besoin de migration, juste conservation en l'état.
+- ✅ **FAIT (2026-07-12)** — L'UX de « Nouvelle inscription » : page unique dynamique (parent saisi
+  une fois, enfants ajoutés à la volée, tarif dégressif visible en direct) plutôt que l'assistant
+  4-étapes-par-élève que RTK avait initialement. Portée dans `NewRegistrationForm.tsx`, branchée
+  sur le vrai `pricing_rules` de RTK (plus riche que le tableau figé du legacy : 5 paliers, 3 modes
+  de facturation). Amélioration au passage non présente dans le legacy : mode **Rentrée** qui
+  réinscrit un élève déjà connu sans dupliquer son dossier (le legacy recréait une inscription
+  complète chaque année ; RTK garde l'élève et ajoute juste une `enrollment`). Détail en session 21
+  de `MASTER_PROJECT.md`.
+- ✅ **FAIT (2026-07-14)** — L'UX de « Tarification par lieu » (§6/§8 legacy, jamais construite
+  ni côté legacy ni côté RTK malgré le calcul déjà présent des deux côtés) : page
+  `/settings/tarification`, 2 onglets (Par site / Par famille), édition inline, stats
+  familles/enfants/mensuel/annuel/%CA comme le legacy. Au passage, **bug critique corrigé** :
+  le formulaire d'inscription (session 21) calculait le dégressif comme un barème progressif
+  au lieu du tarif unique par taille de fratrie réellement appliqué par `generate-monthly` —
+  voir session 22 de `MASTER_PROJECT.md`.
+- ✅ **FAIT (2026-07-14)** — Suite du fix précédent : une 4e implémentation divergente du même
+  calcul (`computeMonthlyAmount` dans `queries.ts`, utilisée par Finances/registre
+  familles/inscription publique) traitait encore le forfait famille comme un dégressif
+  multiplié par le nombre d'enfants. Corrigée par délégation à la source de vérité unique
+  `lib/pricing.ts`. Voir session 23 de `MASTER_PROJECT.md`. **Duplication tranchée** : sur
+  demande explicite de l'utilisateur, le CRUD tarifs embarqué dans `FinancesContent.tsx` a
+  été retiré ; `/settings/tarification` est désormais la seule surface d'édition, Finances
+  n'affiche plus qu'une vue lecture seule + un lien vers la page dédiée.
 
 ---
 

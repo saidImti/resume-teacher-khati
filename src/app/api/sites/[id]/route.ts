@@ -8,6 +8,7 @@ const UpdateSiteSchema = z.object({
   address: z.string().max(240).nullable().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   is_active: z.boolean().optional(),
+  registration_prefix: z.number().int().positive().nullable().optional(),
 })
 
 function slugify(value: string) {
@@ -42,10 +43,20 @@ export async function PATCH(
       .from('sites')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', auth.organizationId)
       .select('*')
       .single()
 
-    if (error || !data) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
+    if (error) {
+      if (error.code === '23505') {
+        const message = error.message.includes('registration_prefix')
+          ? `Le code ${parsed.data.registration_prefix} est deja utilise par un autre site`
+          : 'Un site avec ce nom existe deja'
+        return NextResponse.json({ error: message }, { status: 409 })
+      }
+      return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
+    }
+    if (!data) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
 
     return NextResponse.json(data)
   } catch (error) {
@@ -68,6 +79,7 @@ export async function DELETE(
       .from('sites')
       .update({ is_active: false })
       .eq('id', id)
+      .eq('organization_id', auth.organizationId)
 
     if (error) return NextResponse.json({ error: 'Site introuvable' }, { status: 404 })
 

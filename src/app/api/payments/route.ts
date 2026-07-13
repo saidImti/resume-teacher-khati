@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 const PaymentSchema = z.object({
   family_id: z.string().uuid(),
@@ -13,9 +14,10 @@ const PaymentSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  const ctx = await getOrgContext()
+  if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+  // Finances : admin uniquement (matrice RLS)
+  if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
 
   const parsed = PaymentSchema.safeParse(await request.json())
   if (!parsed.success) {
@@ -29,6 +31,7 @@ export async function POST(request: NextRequest) {
     .select('*')
     .eq('id', payload.invoice_id)
     .eq('family_id', payload.family_id)
+    .eq('organization_id', ctx.organizationId)
     .single()
   if (invoiceError || !invoice) {
     return NextResponse.json({ error: 'Facture introuvable' }, { status: 404 })
@@ -37,7 +40,9 @@ export async function POST(request: NextRequest) {
   const { data: payment, error: paymentError } = await admin
     .from('payments')
     .insert({
-      user_id: invoice.user_id,
+      organization_id: ctx.organizationId,
+      // user_id NOT NULL jusqu'à la migration 019
+      user_id: ctx.user.id,
       family_id: payload.family_id,
       invoice_id: payload.invoice_id,
       amount: payload.amount,

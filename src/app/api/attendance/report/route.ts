@@ -5,14 +5,14 @@
 // page d'impression A4 /presences/rapport/print).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { buildAttendanceReport } from '@/lib/attendance-report'
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from')
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const admin = createAdminSupabaseClient()
     const report = await buildAttendanceReport(admin, {
-      userId: user.id,
+      organizationId: ctx.organizationId,
       from,
       to,
       siteId: searchParams.get('siteId'),

@@ -1,15 +1,16 @@
 // ─── API /api/whatsapp-settings ──────────────────────────────────────────────
-// GET  → récupère les paramètres WhatsApp
-// PATCH → met à jour (test_mode, test_number, n8n_webhook_url, etc.)
+// GET  → récupère les paramètres WhatsApp de l'organisation
+// PATCH → met à jour (test_mode, test_number, n8n_webhook_url, etc.) — admin
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 
 export async function GET() {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const { data, error } = await supabase
       .from('whatsapp_settings')
@@ -17,7 +18,7 @@ export async function GET() {
         'production_number, production_verified, test_number, test_mode, ' +
         'n8n_webhook_url, n8n_enabled, messages_sent_today, messages_sent_month, last_message_at'
       )
-      .eq('user_id', user.id)
+      .eq('organization_id', ctx.organizationId)
       .maybeSingle()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -43,9 +44,11 @@ export async function GET() {
 
 export async function PATCH(req: NextRequest) {
   try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Config : admin uniquement (matrice RLS)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
     const supabase = await createServerSupabaseClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
 
     const body = await req.json() as {
       test_mode?:       boolean
@@ -55,10 +58,14 @@ export async function PATCH(req: NextRequest) {
       n8n_enabled?:     boolean
     }
 
-    // Upsert
+    // Upsert par organisation (unique organization_id créé en migration 018)
     const { data, error } = await supabase
       .from('whatsapp_settings')
-      .upsert({ user_id: user.id, ...body }, { onConflict: 'user_id' })
+      .upsert(
+        // user_id NOT NULL jusqu'à la migration 019
+        { organization_id: ctx.organizationId, user_id: ctx.user.id, ...body },
+        { onConflict: 'organization_id' }
+      )
       .select(
         'production_number, production_verified, test_number, test_mode, ' +
         'n8n_webhook_url, n8n_enabled, messages_sent_today, messages_sent_month'

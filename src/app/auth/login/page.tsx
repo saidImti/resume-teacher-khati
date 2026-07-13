@@ -1,29 +1,20 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { createAdminSupabaseClient } from '@/lib/supabase/server'
-import { getLogoUrlForSoleUser } from '@/lib/branding'
 import { LoginForm } from './LoginForm'
 
 export const metadata: Metadata = { title: 'Connexion' }
 
-export default async function LoginPage() {
-  // Page publique (pré-authentification) — l'app est mono-utilisateur,
-  // même hypothèse que le reste du projet (scripts de migration, Mode Test).
-  const logoUrl = await getLogoUrlForSoleUser(createAdminSupabaseClient()).catch(() => null)
-
+export default function LoginPage() {
+  // Page publique multi-tenant : branding générique (le logo de chaque
+  // école s'affiche après connexion — Sidebar, documents, etc.)
   return (
     <div className="min-h-screen flex">
       {/* Panneau gauche — Branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-primary p-12 text-white">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center text-lg overflow-hidden">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
-            ) : (
-              '📚'
-            )}
+          <div className="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center text-lg">
+            📚
           </div>
           <span className="font-semibold text-lg">Résumé Teacher Khati</span>
         </div>
@@ -66,13 +57,8 @@ export default async function LoginPage() {
       <div className="flex-1 flex flex-col items-center justify-center p-8">
         {/* Logo mobile */}
         <div className="flex lg:hidden items-center gap-3 mb-10">
-          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-lg overflow-hidden">
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt="Logo" className="h-full w-full object-contain p-1" />
-            ) : (
-              '📚'
-            )}
+          <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center text-lg">
+            📚
           </div>
           <span className="font-semibold text-lg">Résumé Teacher Khati</span>
         </div>
@@ -81,13 +67,20 @@ export default async function LoginPage() {
           <div className="mb-8">
             <h2 className="text-2xl font-bold tracking-tight">Connexion</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Accédez à votre espace Teacher Khati
+              Accédez à votre espace école
             </p>
           </div>
 
           <Suspense fallback={<div className="h-48 rounded-xl border border-border bg-card" />}>
             <LoginForm />
           </Suspense>
+
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Pas encore de compte ?{' '}
+            <Link href="/auth/signup" className="font-medium text-primary underline-offset-4 hover:underline">
+              Créer mon école
+            </Link>
+          </p>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
             En vous connectant, vous acceptez notre{' '}

@@ -1,13 +1,15 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
-  Euro, Receipt, Download, Plus, Save, Users, Pencil, Trash2, Printer, MessageCircle, Loader2,
+  Euro, Receipt, Download, ArrowRight, Printer, MessageCircle, Loader2,
 } from 'lucide-react'
 import { computeMonthlyAmount } from '@/lib/supabase/queries'
 import type { Site, PricingRule, Invoice, InvoiceStatus, Family } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 import { GenerateInvoicesButton } from './GenerateInvoicesButton'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 
 interface RevenueRow {
   period_month: number
@@ -43,62 +45,15 @@ const BILLING_LABELS: Record<string, string> = {
   monthly_family:    'Mensuel / famille',
 }
 
-type PricingForm = {
-  site_id: string
-  name: string
-  billing_type: PricingRule['billing_type']
-  price_per_session: string
-  price_1_child: string
-  price_2_children: string
-  price_3_children: string
-  price_4_children: string
-  price_5plus: string
-  effective_from: string
-  effective_until: string
-  is_active: boolean
-  notes: string
-}
-
-type FamilyRateForm = {
-  family_id: string
-  primary_site_id: string
-  custom_monthly_rate: string
-  custom_rate_note: string
-}
-
 export function FinancesContent({ sites, pricingRules, invoices, revenueStats, currentYear, families }: Props) {
+  // Finances : mutations admin-only (matrice RLS) — la page reste consultable
+  const { isAdmin } = useOrgRole()
   const [tab, setTab] = useState<'dashboard' | 'factures' | 'tarifs'>('dashboard')
   const [filterStatus, setFilterStatus] = useState<InvoiceStatus | 'all'>('all')
   const [filterSite, setFilterSite] = useState('all')
-  const [localPricingRules, setLocalPricingRules] = useState(pricingRules)
-  const [localFamilies, setLocalFamilies] = useState(families)
-  const [savingPricing, setSavingPricing] = useState(false)
-  const [savingFamilyRate, setSavingFamilyRate] = useState(false)
-  const [clearingFamilyRateId, setClearingFamilyRateId] = useState<string | null>(null)
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null)
   const [sendingReminderAll, setSendingReminderAll] = useState(false)
   const [reminderResult, setReminderResult] = useState<{ sent: number; failed: number; simulated: boolean } | null>(null)
-  const [pricingForm, setPricingForm] = useState<PricingForm>({
-    site_id: sites[0]?.id ?? '',
-    name: `Tarif ${sites[0]?.name ?? 'site'} ${currentYear}`,
-    billing_type: 'monthly_family',
-    price_per_session: '',
-    price_1_child: '45',
-    price_2_children: '40',
-    price_3_children: '35',
-    price_4_children: '30',
-    price_5plus: '25',
-    effective_from: new Date().toISOString().split('T')[0]!,
-    effective_until: '',
-    is_active: true,
-    notes: '',
-  })
-  const [familyRateForm, setFamilyRateForm] = useState<FamilyRateForm>({
-    family_id: families[0]?.id ?? '',
-    primary_site_id: families[0]?.primary_site_id ?? sites[0]?.id ?? '',
-    custom_monthly_rate: families[0]?.custom_monthly_rate?.toString() ?? '',
-    custom_rate_note: families[0]?.custom_rate_note ?? '',
-  })
 
   // KPIs globaux
   const totalDue   = invoices.reduce((s, i) => s + i.amount_due,  0)
@@ -106,30 +61,30 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
   const totalUnpaid = totalDue - totalPaid
   const overdueCount = invoices.filter(i => i.status === 'overdue').length
   const specialRateFamilies = useMemo(() => {
-    return localFamilies
+    return families
       .filter((family) => family.custom_monthly_rate !== null && family.custom_monthly_rate !== undefined)
       .sort((a, b) => {
         const siteA = sites.find((site) => site.id === a.primary_site_id)?.name ?? ''
         const siteB = sites.find((site) => site.id === b.primary_site_id)?.name ?? ''
         return siteA.localeCompare(siteB) || a.parent1_last.localeCompare(b.parent1_last)
       })
-  }, [localFamilies, sites])
+  }, [families, sites])
   const activeRuleBySite = useMemo(() => {
     const today = new Date().toISOString().split('T')[0]!
     const map = new Map<string, PricingRule>()
-    localPricingRules
+    pricingRules
       .filter((rule) => rule.is_active && rule.effective_from <= today && (!rule.effective_until || rule.effective_until >= today))
       .sort((a, b) => b.effective_from.localeCompare(a.effective_from))
       .forEach((rule) => {
         if (!map.has(rule.site_id)) map.set(rule.site_id, rule)
       })
     return map
-  }, [localPricingRules])
+  }, [pricingRules])
   const financeActions = [
     {
       title: 'Tarifs',
-      text: localPricingRules.length > 0 ? `${localPricingRules.length} regle${localPricingRules.length > 1 ? 's' : ''} configuree${localPricingRules.length > 1 ? 's' : ''}` : 'Configurer les tarifs par site',
-      done: localPricingRules.length > 0,
+      text: pricingRules.length > 0 ? `${pricingRules.length} regle${pricingRules.length > 1 ? 's' : ''} configuree${pricingRules.length > 1 ? 's' : ''}` : 'Configurer les tarifs par site',
+      done: pricingRules.length > 0,
       tab: 'tarifs' as const,
     },
     {
@@ -201,78 +156,6 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
     URL.revokeObjectURL(url)
   }
 
-  async function createPricingRule(event: React.FormEvent) {
-    event.preventDefault()
-    setSavingPricing(true)
-    try {
-      const res = await fetch('/api/pricing-rules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          site_id: pricingForm.site_id,
-          name: pricingForm.name,
-          billing_type: pricingForm.billing_type,
-          price_per_session: pricingForm.price_per_session,
-          price_1_child: pricingForm.price_1_child,
-          price_2_children: pricingForm.price_2_children,
-          price_3_children: pricingForm.price_3_children,
-          price_4_children: pricingForm.price_4_children,
-          price_5plus: pricingForm.price_5plus,
-          effective_from: pricingForm.effective_from,
-          effective_until: pricingForm.effective_until || null,
-          is_active: pricingForm.is_active,
-          notes: pricingForm.notes || null,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Impossible de créer le tarif')
-      setLocalPricingRules((current) => [data as PricingRule, ...current])
-      setPricingForm((current) => ({
-        ...current,
-        name: `Tarif ${sites.find((site) => site.id === current.site_id)?.name ?? 'site'} ${currentYear}`,
-        notes: '',
-      }))
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erreur lors de la création du tarif')
-    } finally {
-      setSavingPricing(false)
-    }
-  }
-
-  async function saveFamilyRate(event: React.FormEvent) {
-    event.preventDefault()
-    if (!familyRateForm.family_id) return
-    setSavingFamilyRate(true)
-    try {
-      const res = await fetch(`/api/families/${familyRateForm.family_id}/rate`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          primary_site_id: familyRateForm.primary_site_id || null,
-          custom_monthly_rate: familyRateForm.custom_monthly_rate,
-          custom_rate_note: familyRateForm.custom_rate_note || null,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Impossible de modifier le tarif famille')
-      setLocalFamilies((current) => current.map((family) => family.id === data.id ? data as Family : family))
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erreur lors de la modification famille')
-    } finally {
-      setSavingFamilyRate(false)
-    }
-  }
-
-  function selectFamilyForRate(familyId: string) {
-    const family = localFamilies.find((item) => item.id === familyId)
-    setFamilyRateForm({
-      family_id: familyId,
-      primary_site_id: family?.primary_site_id ?? sites[0]?.id ?? '',
-      custom_monthly_rate: family?.custom_monthly_rate?.toString() ?? '',
-      custom_rate_note: family?.custom_rate_note ?? '',
-    })
-  }
-
   async function sendPaymentReminder(invoiceId: string) {
     setSendingReminderId(invoiceId)
     try {
@@ -311,36 +194,6 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
     }
   }
 
-  async function clearFamilyRate(family: Family) {
-    if (!confirm(`Retirer le tarif special de ${family.parent1_first} ${family.parent1_last} ?\n\nCette famille repassera au tarif normal de son site.`)) return
-    setClearingFamilyRateId(family.id)
-    try {
-      const res = await fetch(`/api/families/${family.id}/rate`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          primary_site_id: family.primary_site_id,
-          custom_monthly_rate: null,
-          custom_rate_note: null,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Impossible de retirer le tarif famille')
-      setLocalFamilies((current) => current.map((item) => item.id === data.id ? data as Family : item))
-      if (familyRateForm.family_id === family.id) {
-        setFamilyRateForm((current) => ({
-          ...current,
-          custom_monthly_rate: '',
-          custom_rate_note: '',
-        }))
-      }
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Erreur lors du retrait du tarif famille')
-    } finally {
-      setClearingFamilyRateId(null)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5 sm:px-6">
@@ -356,10 +209,12 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                       Tarifs, situations particulières, facturation et paiements réunis dans un parcours de gestion unique.
                     </p>
                   </div>
-                  <button type="button" onClick={() => setTab('tarifs')}
-                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                    <Plus className="h-4 w-4" /> Nouveau tarif
-                  </button>
+                  {isAdmin && (
+                    <Link href="/settings/tarification"
+                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                      <Euro className="h-4 w-4" /> Gérer les tarifs
+                    </Link>
+                  )}
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <FinanceMetric label="Encaissé" value={`${totalPaid.toFixed(0)} €`} helper="paiements reçus" />
@@ -479,7 +334,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                   const siteInvoices = invoices.filter(i => i.site_id === site.id)
                   const sitePaid = siteInvoices.reduce((s, i) => s + i.amount_paid, 0)
                   const siteDue  = siteInvoices.reduce((s, i) => s + i.amount_due,  0)
-                  const rule = localPricingRules.find(r => r.site_id === site.id && r.is_active)
+                  const rule = pricingRules.find(r => r.site_id === site.id && r.is_active)
                   return (
                     <div key={site.id} className="rounded-xl border border-border bg-card p-5">
                       <div className="flex items-center justify-between mb-4">
@@ -507,6 +362,11 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                       )}
                       {rule && rule.billing_type === 'monthly_family' && (
                         <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+                          {rule.price_1_child} € / mois / famille (forfait, quel que soit le nombre d&apos;enfants)
+                        </p>
+                      )}
+                      {rule && rule.billing_type === 'monthly_per_child' && (
+                        <p className="mt-3 text-xs text-[var(--color-text-muted)]">
                           1 enfant: {rule.price_1_child} € · 2: {rule.price_2_children} € · 3: {rule.price_3_children} € / mois
                         </p>
                       )}
@@ -523,18 +383,20 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
           <div className="space-y-5">
             <FadeIn>
               <div className="flex flex-wrap items-center gap-3">
-                <GenerateInvoicesButton />
-                <button
-                  type="button"
-                  onClick={sendAllReminders}
-                  disabled={sendingReminderAll || invoices.filter(i => ['pending','overdue','partial'].includes(i.status)).length === 0}
-                  className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-40"
-                >
-                  {sendingReminderAll
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <MessageCircle className="h-4 w-4" />}
-                  Relancer les impayés
-                </button>
+                {isAdmin && <GenerateInvoicesButton />}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={sendAllReminders}
+                    disabled={sendingReminderAll || invoices.filter(i => ['pending','overdue','partial'].includes(i.status)).length === 0}
+                    className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:opacity-40"
+                  >
+                    {sendingReminderAll
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <MessageCircle className="h-4 w-4" />}
+                    Relancer les impayés
+                  </button>
+                )}
                 {reminderResult && (
                   <span className={`text-xs font-medium px-2 py-1 rounded-lg ${reminderResult.simulated ? 'bg-blue-50 text-blue-700' : reminderResult.sent > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                     {reminderResult.simulated ? `Simulation: ${reminderResult.sent} envoyé(s)` : `${reminderResult.sent} relance(s) envoyée(s)${reminderResult.failed > 0 ? ` · ${reminderResult.failed} échec` : ''}`}
@@ -676,141 +538,25 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
         {/* ── TARIFS ── */}
         {tab === 'tarifs' && (
           <div className="space-y-5">
-            <FadeIn>
-              <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
-                <form onSubmit={createPricingRule} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
-                  <div className="mb-5 flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600">Nouvelle grille</p>
-                      <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Créer un tarif par site</h2>
-                      <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                        Par séance, mensuel par enfant ou mensuel famille avec dégressivité.
-                      </p>
-                    </div>
-                    <Plus className="h-5 w-5 text-emerald-600" />
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Site">
-                      <select
-                        value={pricingForm.site_id}
-                        onChange={(e) => {
-                          const siteName = sites.find((site) => site.id === e.target.value)?.name ?? 'site'
-                          setPricingForm((current) => ({ ...current, site_id: e.target.value, name: `Tarif ${siteName} ${currentYear}` }))
-                        }}
-                        className={selectCls}
-                        required
-                      >
-                        {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Nom du tarif">
-                      <input value={pricingForm.name} onChange={(e) => setPricingForm((current) => ({ ...current, name: e.target.value }))} className={inputCls} required />
-                    </Field>
-                    <Field label="Type de facturation">
-                      <select
-                        value={pricingForm.billing_type}
-                        onChange={(e) => setPricingForm((current) => ({ ...current, billing_type: e.target.value as PricingRule['billing_type'] }))}
-                        className={selectCls}
-                      >
-                        <option value="monthly_family">Mensuel famille dégressif</option>
-                        <option value="monthly_per_child">Mensuel par enfant</option>
-                        <option value="per_session">Par séance</option>
-                      </select>
-                    </Field>
-                    <Field label="Actif dès le">
-                      <input type="date" value={pricingForm.effective_from} onChange={(e) => setPricingForm((current) => ({ ...current, effective_from: e.target.value }))} className={inputCls} required />
-                    </Field>
-                  </div>
-
-                  {pricingForm.billing_type === 'per_session' ? (
-                    <div className="mt-4">
-                      <Field label="Prix par séance et par enfant">
-                        <input type="number" min="0" step="0.01" value={pricingForm.price_per_session} onChange={(e) => setPricingForm((current) => ({ ...current, price_per_session: e.target.value }))} placeholder="ex. 12" className={inputCls} />
-                      </Field>
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-3 sm:grid-cols-5">
-                      {([
-                        ['price_1_child', '1 enfant'],
-                        ['price_2_children', '2 enfants'],
-                        ['price_3_children', '3 enfants'],
-                        ['price_4_children', '4 enfants'],
-                        ['price_5plus', '5+'],
-                      ] as Array<[keyof Pick<PricingForm, 'price_1_child' | 'price_2_children' | 'price_3_children' | 'price_4_children' | 'price_5plus'>, string]>).map(([key, label]) => (
-                        <Field key={key} label={label}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={pricingForm[key]}
-                            onChange={(e) => setPricingForm((current) => ({ ...current, [key]: e.target.value }))}
-                            className={inputCls}
-                          />
-                        </Field>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <Field label="Fin de validité">
-                      <input type="date" value={pricingForm.effective_until} onChange={(e) => setPricingForm((current) => ({ ...current, effective_until: e.target.value }))} className={inputCls} />
-                    </Field>
-                    <label className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 text-sm text-[var(--color-text)]">
-                      <input type="checkbox" checked={pricingForm.is_active} onChange={(e) => setPricingForm((current) => ({ ...current, is_active: e.target.checked }))} />
-                      Tarif actif
-                    </label>
-                  </div>
-
-                  <Field label="Notes et conditions">
-                    <textarea value={pricingForm.notes} onChange={(e) => setPricingForm((current) => ({ ...current, notes: e.target.value }))} rows={3} placeholder="Ex. Tarif solidaire, valable pour l'année, remise fratrie..." className={inputCls} />
-                  </Field>
-
-                  <button type="submit" disabled={savingPricing || !pricingForm.site_id} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
-                    <Save className="h-4 w-4" />
-                    {savingPricing ? 'Création...' : 'Créer le tarif'}
-                  </button>
-                </form>
-
-                <form onSubmit={saveFamilyRate} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6">
-                  <div className="mb-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-600">Cas particulier</p>
-                    <h2 className="mt-1 text-lg font-semibold text-[var(--color-text)]">Tarif personnalisé famille</h2>
-                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                      Pour une famille en difficulté, fixe un montant mensuel spécial et documente la raison.
+            {isAdmin && (
+              <FadeIn>
+                <Link
+                  href="/settings/tarification"
+                  className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 transition hover:bg-primary/10"
+                >
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Configuration</p>
+                    <h2 className="mt-1 text-lg font-semibold text-foreground">Créer ou modifier un tarif</h2>
+                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                      Grilles par site (dégressif, séance, forfait) et tarifs spéciaux par famille se gèrent depuis Paramètres → Tarification.
                     </p>
                   </div>
-
-                  <div className="space-y-4">
-                    <Field label="Famille">
-                      <select value={familyRateForm.family_id} onChange={(e) => selectFamilyForRate(e.target.value)} className={selectCls}>
-                        <option value="">Choisir une famille</option>
-                        {localFamilies.map((family) => (
-                          <option key={family.id} value={family.id}>{family.parent1_first} {family.parent1_last}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field label="Site principal">
-                      <select value={familyRateForm.primary_site_id} onChange={(e) => setFamilyRateForm((current) => ({ ...current, primary_site_id: e.target.value }))} className={selectCls}>
-                        <option value="">Aucun site</option>
-                        {sites.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
-                      </select>
-                    </Field>
-                    <Field label="Montant mensuel personnalisé">
-                      <input type="number" min="0" step="0.01" value={familyRateForm.custom_monthly_rate} onChange={(e) => setFamilyRateForm((current) => ({ ...current, custom_monthly_rate: e.target.value }))} placeholder="ex. 20" className={inputCls} />
-                    </Field>
-                    <Field label="Justification / note interne">
-                      <textarea value={familyRateForm.custom_rate_note} onChange={(e) => setFamilyRateForm((current) => ({ ...current, custom_rate_note: e.target.value }))} rows={4} placeholder="Ex. Tarif solidaire jusqu'à décembre, situation temporaire..." className={inputCls} />
-                    </Field>
-                  </div>
-
-                  <button type="submit" disabled={savingFamilyRate || !familyRateForm.family_id} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-700 disabled:opacity-60">
-                    <Users className="h-4 w-4" />
-                    {savingFamilyRate ? 'Enregistrement...' : 'Appliquer le tarif special'}
-                  </button>
-                </form>
-              </div>
-            </FadeIn>
+                  <span className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">
+                    Ouvrir Tarification <ArrowRight className="h-4 w-4" />
+                  </span>
+                </Link>
+              </FadeIn>
+            )}
 
             <FadeIn delay={0.04}>
               <div className="rounded-2xl border border-violet-200 bg-violet-50/50 p-6">
@@ -865,24 +611,15 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                               )}
                             </div>
                             <p className="line-clamp-2 text-xs text-[var(--color-text-muted)]">{family.custom_rate_note || 'Aucune note'}</p>
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => selectFamilyForRate(family.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                                Modifier
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => clearFamilyRate(family)}
-                                disabled={clearingFamilyRateId === family.id}
-                                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                                Retirer
-                              </button>
+                            <div className="flex justify-end">
+                              {isAdmin && (
+                                <Link
+                                  href="/settings/tarification"
+                                  className="inline-flex items-center gap-1 rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-50"
+                                >
+                                  Gérer
+                                </Link>
+                              )}
                             </div>
                           </div>
                         )
@@ -896,7 +633,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
             <FadeIn>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {sites.map(site => {
-                  const rules = localPricingRules.filter(r => r.site_id === site.id)
+                  const rules = pricingRules.filter(r => r.site_id === site.id)
                     .sort((a, b) => b.effective_from.localeCompare(a.effective_from))
                   return (
                     <div key={site.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 space-y-4">
@@ -933,7 +670,7 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                                 </div>
                               )}
 
-                              {(rule.billing_type === 'monthly_family' || rule.billing_type === 'monthly_per_child') && (
+                              {rule.billing_type === 'monthly_per_child' && (
                                 <div className="grid grid-cols-5 gap-2 text-center">
                                   {[
                                     { n: '1 enf.', v: rule.price_1_child },
@@ -949,6 +686,14 @@ export function FinancesContent({ sites, pricingRules, invoices, revenueStats, c
                                       </p>
                                     </div>
                                   ))}
+                                </div>
+                              )}
+
+                              {rule.billing_type === 'monthly_family' && (
+                                <div className="flex items-center gap-2">
+                                  <Euro className="h-4 w-4 text-emerald-600" />
+                                  <span className="text-lg font-bold text-emerald-700">{rule.price_1_child} €</span>
+                                  <span className="text-xs text-[var(--color-text-muted)]">/ mois / famille (forfait, quel que soit le nombre d&apos;enfants)</span>
                                 </div>
                               )}
 
@@ -1005,14 +750,4 @@ function FinanceMetric({
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-[var(--color-text)]">{label}</span>
-      {children}
-    </label>
-  )
-}
-
 const selectCls = 'rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-emerald-500/30'
-const inputCls = 'w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-2 focus:ring-emerald-500/30'

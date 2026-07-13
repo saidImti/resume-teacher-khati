@@ -19,6 +19,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { buildSchoolRegister, type RegisterPaymentStatus, type SchoolRegisterRow } from '@/lib/school-register'
+import { useOrgRole } from '@/contexts/OrgRoleContext'
 import type { Family, Invoice, PricingRule, Site, Student, StudentStats } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
 
@@ -90,6 +91,7 @@ export function ElevesContent({
   currentMonth,
   currentYear,
 }: Props) {
+  const { canWrite, isAdmin } = useOrgRole()
   const [search, setSearch] = useState('')
   const [filterSite, setFilterSite] = useState('all')
   const [filterPayment, setFilterPayment] = useState<RegisterPaymentStatus | 'all' | 'attention'>('all')
@@ -354,13 +356,15 @@ export function ElevesContent({
                       <Download className="h-4 w-4" />
                       Exporter
                     </button>
-                    <Link
-                      href="/eleves/new"
-                      className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      Inscrire un élève
-                    </Link>
+                    {canWrite && (
+                      <Link
+                        href="/eleves/new"
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                      >
+                        <UserPlus className="h-4 w-4" />
+                        Inscrire un élève
+                      </Link>
+                    )}
                   </div>
                 </div>
 
@@ -544,14 +548,16 @@ export function ElevesContent({
                           </td>
                           <td className="px-4 py-4 text-right">
                             <div className="flex flex-col items-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => setManagedRowId(row.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
-                              >
-                                <WalletCards className="h-3.5 w-3.5" />
-                                Gérer
-                              </button>
+                              {isAdmin && (
+                                <button
+                                  type="button"
+                                  onClick={() => setManagedRowId(row.id)}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-accent"
+                                >
+                                  <WalletCards className="h-3.5 w-3.5" />
+                                  Gérer
+                                </button>
+                              )}
                               {row.students[0] && (
                                 <Link
                                   href={`/eleves/${row.students[0].id}`}

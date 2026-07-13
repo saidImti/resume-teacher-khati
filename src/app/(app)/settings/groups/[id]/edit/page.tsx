@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { createAdminSupabaseClient, createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/server'
+import { getOrgContext } from '@/lib/org'
 import { Header } from '@/components/layout/Header'
 import { GroupForm } from '@/components/groups/GroupForm'
 import type { Group, Site, Level, AcademicYear } from '@/types'
@@ -10,9 +11,8 @@ interface PageProps {
 }
 
 export default async function EditGroupPage({ params }: PageProps) {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/auth/login')
+  const ctx = await getOrgContext()
+  if (!ctx) redirect('/auth/login')
   const admin = createAdminSupabaseClient()
 
   const { id } = await params
@@ -21,11 +21,12 @@ export default async function EditGroupPage({ params }: PageProps) {
     admin
       .from('groups')
       .select('*, site:sites(*), level:levels(*), academic_year:academic_years(*)')
+      .eq('organization_id', ctx.organizationId)
       .eq('id', id)
       .single(),
-    admin.from('sites').select('*').eq('is_active', true).order('name'),
-    admin.from('levels').select('*').order('sort_order'),
-    admin.from('academic_years').select('*').order('start_date', { ascending: false }),
+    admin.from('sites').select('*').eq('organization_id', ctx.organizationId).eq('is_active', true).order('name'),
+    admin.from('levels').select('*').eq('organization_id', ctx.organizationId).order('sort_order'),
+    admin.from('academic_years').select('*').eq('organization_id', ctx.organizationId).order('start_date', { ascending: false }),
   ])
 
   if (groupRes.error || !groupRes.data) notFound()

@@ -1,6 +1,15 @@
 import crypto from 'crypto'
 
-interface RegistrationPayload {
+export interface RegistrationPayload {
+  /**
+   * Organisation du QR. Absent des tokens legacy (émis avant le multi-tenant,
+   * QR imprimés valides 90 j) — dans ce cas, résoudre via getOrgIdForUser(userId).
+   */
+  organizationId?: string
+  /**
+   * Émetteur du lien. Toujours présent (legacy et nouveau) : les inserts
+   * families/students exigent encore user_id NOT NULL (drop en migration 019).
+   */
   userId: string
   exp: number
   nonce: string
@@ -27,8 +36,9 @@ function sign(body: string) {
   return b64url(crypto.createHmac('sha256', secret()).update(body).digest())
 }
 
-export function createRegistrationToken(userId: string, days = 90) {
+export function createRegistrationToken(organizationId: string, userId: string, days = 90) {
   const payload: RegistrationPayload = {
+    organizationId,
     userId,
     exp: Math.floor(Date.now() / 1000) + days * 24 * 60 * 60,
     nonce: crypto.randomBytes(12).toString('hex'),
