@@ -119,20 +119,32 @@ export async function withApiAuth(
 
   // ── 2. Essai par session Supabase (cookie) ───────────────────
   try {
-    const supabase = await createServerSupabaseClient()
-    const { data: { user }, error } = await supabase.auth.getUser()
+    // Identité déjà vérifiée par le middleware pour cette requête (header
+    // interne, jamais fourni par le client) — évite un 2e appel réseau à
+    // auth.getUser() qui ferait courir une race sur le refresh token en
+    // concurrence avec la vérification du middleware. Voir ERRORS/008.
+    const verifiedUserId = request.headers.get('x-mw-verified-user-id')
 
-    if (error || !user) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          { error: 'Non authentifié. Fournissez une session ou un header X-API-Key.' },
-          { status: 401 }
-        ),
+    let userId: string
+    if (verifiedUserId) {
+      userId = verifiedUserId
+    } else {
+      // Filet de secours si le middleware n'a pas tourné pour cette route.
+      const supabase = await createServerSupabaseClient()
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error || !user) {
+        return {
+          ok: false,
+          response: NextResponse.json(
+            { error: 'Non authentifié. Fournissez une session ou un header X-API-Key.' },
+            { status: 401 }
+          ),
+        }
       }
+      userId = user.id
     }
 
-    const org = await resolveOrgAndRole(user.id)
+    const org = await resolveOrgAndRole(userId)
     if (!org) {
       return {
         ok: false,
@@ -157,7 +169,7 @@ export async function withApiAuth(
 
     return {
       ok: true,
-      userId: user.id,
+      userId,
       organizationId: org.organizationId,
       role: org.role,
       scopes,

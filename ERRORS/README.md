@@ -20,6 +20,7 @@
 | 005 | Domaines email inventés rejetés par Supabase | Mineure | `email_address_invalid`, `example.com`, comptes de test signup | [005](005-domaines-email-invalides-supabase-signup.md) |
 | 006 | Scripts temporaires perturbent `next dev` | Mineure | Fast Refresh en rafale, test navigateur incohérent, `ERR_MODULE_NOT_FOUND` | [006](006-scripts-temporaires-perturbent-next-dev.md) |
 | 007 | Invitation d'un membre : trigger ne voit pas `app_metadata` à temps | 🔴 Critique | invité devient admin de sa propre org, `admin.createUser`, `app_metadata`, race condition | [007](007-invite-app-metadata-race-condition-trigger.md) |
+| 008 | Boucle de redirection infinie /dashboard <-> /auth/login (race refresh token) | 🔴 Critique | site bloqué en chargement infini, `document.readyState` bloqué sur loading, `401` sur une API après un `200` sur la page, refresh token, `auth.getUser()` | [008](008-boucle-redirection-race-refresh-token.md) |
 
 ## Par catégorie
 
@@ -31,6 +32,9 @@
 
 **Triggers `auth.users` / `app_metadata`** : [002](002-trigger-auth-users-manquant.md),
 [007](007-invite-app-metadata-race-condition-trigger.md)
+
+**Auth / sessions** : [007](007-invite-app-metadata-race-condition-trigger.md),
+[008](008-boucle-redirection-race-refresh-token.md)
 
 **Méthodologie de test / diagnostic** : [002](002-trigger-auth-users-manquant.md) (technique
 du scaffolding `EXCEPTION WHEN OTHERS` pour voir une vraie erreur SQL derrière un 500 opaque),
