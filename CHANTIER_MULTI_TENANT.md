@@ -1,17 +1,26 @@
 # CHANTIER — Multi-tenant SaaS (organizations)
 
-> **État : EN COURS — NE PAS MERGER SUR MAIN EN L'ÉTAT**
-> Branche : `feat/multi-tenant-saas` · Dernière mise à jour : **2026-07-12**
+> **État : FUSIONNÉ SUR MAIN ET DÉPLOYÉ (2026-07-14)** — sur demande explicite de l'utilisateur
+> (« implémente tout, ne me demande pas d'autorisation »), **avant la fin du plan de vérification
+> ci-dessous**. Commit de fusion `c01eebd`, déploiement Vercel confirmé `success`
+> (https://resume-teacher-khati.vercel.app). La branche `feat/multi-tenant-saas` reste
+> l'historique de référence mais tout son contenu est désormais sur `main`.
+>
+> ⚠️ **Points du plan de vérification NON terminés au moment du merge** — à traiter maintenant
+> en production plutôt qu'avant, puisque le merge a eu lieu en premier : QR d'inscription
+> publique (nouveau format + ancien format legacy), marque (logo/signataires) par organisation
+> en conditions réelles, et surtout **aucune confirmation avec le VRAI compte Teacher Khati**
+> que rien n'a régressé (tout testé avec des comptes jetables uniquement). Voir « Reste à faire »
+> ci-dessous, désormais à exécuter directement sur `main`/prod.
+>
 > Migration `018_organizations.sql` : **✅ APPLIQUÉE** à la base (+ 2 correctifs post-application,
 > voir §6 et [ERRORS/002](ERRORS/002-trigger-auth-users-manquant.md), [ERRORS/003](ERRORS/003-index-unique-non-scope-organisation.md)).
 >
-> ⚠️ **Hors-scope ajouté sur cette branche (2026-07-11 → 14)** : à la demande de l'utilisateur, du
-> travail de fusion legacy (code d'inscription par site + réécriture complète de la « Nouvelle
-> inscription » en formulaire dynamique multi-enfants, page `/settings/tarification`, fix d'un bug
-> de calcul tarifaire dupliqué à 4 endroits) a été fait ICI plutôt que sur `main`, faute d'avoir
-> créé une branche dédiée. Détails : sessions 21-23 de `MASTER_PROJECT.md` et
-> [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) §5. **Ne pas confondre avec le
-> chantier multi-tenant lui-même** en relisant l'historique de commits de cette branche.
+> Pour mémoire : entre 2026-07-11 et 07-14, du travail **hors-scope** (fusion legacy : code
+> d'inscription par site, formulaire dynamique multi-enfants, page `/settings/tarification`,
+> 4 fixes de calcul tarifaire) a été fait sur cette branche à la demande de l'utilisateur, en plus
+> du chantier multi-tenant lui-même. Détails : sessions 21-27 de `MASTER_PROJECT.md` et
+> [`AUDIT_FUSION_TEACHER_KHATI.md`](./AUDIT_FUSION_TEACHER_KHATI.md) §5.
 
 ## 🔖 REPRISE ICI (résumé condensé — lire ceci en premier dans une nouvelle session)
 
