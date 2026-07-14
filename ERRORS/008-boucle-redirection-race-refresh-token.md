@@ -63,3 +63,31 @@ Si un utilisateur signale que le site « reste bloqué en chargement » : vérif
 `document.readyState` (bloqué sur `"loading"` = signe de ce bug), regarder les logs Vercel
 runtime pour un pattern `/page (200) -> /api/xxx (401) -> /auth/login (307) -> /page (200)`
 qui se répète, plutôt que de suspecter d'abord la base de données.
+
+## Mise à jour (même jour) — 2e cause distincte trouvée derrière le même symptôme
+
+Après le fix ci-dessus déployé, le symptôme persistait encore (plus de boucle de
+redirection, mais `<main>` restait vide et `/api/academic-years` répondait toujours
+`401` de façon **systématique**, pas juste intermittente). Un flag de debug temporaire
+dans la route (header renvoyé dans le corps de la réponse 401) a confirmé que
+`x-mw-verified-user-id` était **correctement transmis** — le fix middleware fonctionnait.
+Le vrai problème : **2 comptes `auth.users` sans ligne `public.users` correspondante**
+(`teacher@khati.fr`, `demo@gmail.com`) — orphelins pré-existants (trigger de création de
+profil cassé avant sa réparation, voir [002](002-trigger-auth-users-manquant.md)), jamais
+comblés par le backfill de la migration 018 (`UPDATE users SET organization_id = ...`
+ne peut pas créer une ligne qui n'existe pas). `getOrgContext()` retourne donc `null` de
+façon **garantie et reproductible** pour ces comptes (pas une race), ce qui explique la
+boucle observée initialement : le Server Component `dashboard/page.tsx` redirige vers
+`/auth/login` à chaque fois pour ce compte, et le middleware — qui valide correctement la
+session — rebondit systématiquement vers `/dashboard`.
+
+**Fix complémentaire** : ligne `public.users` créée manuellement pour ces 2 comptes
+(organisation « Teacher Khati », rôle `teacher`) via script admin direct en base.
+
+**Leçon** : face à ce symptôme, vérifier D'ABORD si le compte utilisé a bien une ligne
+`public.users` avec `organization_id` non nul (`SELECT * FROM users WHERE id = '<auth_user_id>'`)
+avant de suspecter une race condition — c'est un diagnostic immédiat, alors que la race
+sur le refresh token ne se manifeste que par intermittence et est plus difficile à confirmer.
+Le fix middleware (header `x-mw-verified-user-id`) reste une amélioration légitime à
+conserver (réduit les appels réseau redondants), mais n'était pas la cause du blocage
+constaté ce jour-là.
