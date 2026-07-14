@@ -3,21 +3,13 @@
 // POST → créer une nouvelle année (avec option de copie des groupes)
 
 import { NextRequest, NextResponse } from 'next/server'
-import { headers } from 'next/headers'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { getOrgContext } from '@/lib/org'
 
 export async function GET() {
   try {
     const ctx = await getOrgContext()
-    if (!ctx) {
-      // DEBUG TEMPORAIRE (retirer apres diagnostic) — voir ERRORS/008.
-      const hdrs = await headers()
-      return NextResponse.json({
-        error: 'Non authentifié',
-        debugVerifiedHeader: hdrs.get('x-mw-verified-user-id'),
-      }, { status: 401 })
-    }
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
     const supabase = await createServerSupabaseClient()
 
     // Années de l'ORGANISATION (pas du user) — tous les membres voient les mêmes
