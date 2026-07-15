@@ -76,3 +76,34 @@ export async function PATCH(
     )
   }
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const ctx = await getOrgContext()
+    if (!ctx) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    // Tarification : admin uniquement (matrice RLS)
+    if (ctx.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs' }, { status: 403 })
+
+    const { id } = await params
+    const admin = createAdminSupabaseClient()
+    const { data, error } = await admin
+      .from('pricing_rules')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', ctx.organizationId)
+      .select('id')
+      .maybeSingle()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    if (!data) return NextResponse.json({ error: 'Tarif introuvable' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Erreur serveur' },
+      { status: 500 }
+    )
+  }
+}

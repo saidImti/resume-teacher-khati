@@ -22,7 +22,6 @@ export default async function TarificationPage() {
       .from('pricing_rules')
       .select('*')
       .eq('organization_id', orgId)
-      .eq('is_active', true)
       .order('effective_from', { ascending: false }),
     admin
       .from('families')
@@ -31,10 +30,23 @@ export default async function TarificationPage() {
       .eq('is_active', true),
   ])
 
-  // Une seule regle active par site (la plus recente si effective_from se chevauche)
-  const ruleBySite = new Map<string, PricingRule>()
+  // Tous les tarifs par site (actifs, inactifs, passes, futurs) — controle total
+  // pour l'utilisateur : creer/modifier/supprimer autant de tarifs que voulu.
+  const rulesBySite = new Map<string, PricingRule[]>()
   for (const r of (rules ?? []) as PricingRule[]) {
-    if (!ruleBySite.has(r.site_id)) ruleBySite.set(r.site_id, r)
+    const list = rulesBySite.get(r.site_id) ?? []
+    list.push(r)
+    rulesBySite.set(r.site_id, list)
+  }
+
+  // Le tarif "en vigueur" par site : actif, deja demarre, le plus recent si
+  // plusieurs se chevauchent — meme convention que GET /api/pricing-rules
+  // et generate-monthly. Utilise uniquement pour les stats de revenu.
+  const today = new Date().toISOString().slice(0, 10)
+  const currentRuleBySite = new Map<string, PricingRule>()
+  for (const [siteId, list] of rulesBySite) {
+    const current = list.find((r) => r.is_active && r.effective_from <= today && (!r.effective_until || r.effective_until >= today))
+    if (current) currentRuleBySite.set(siteId, current)
   }
 
   // Stats par site : familles actives, enfants actifs, revenu mensuel effectif
@@ -44,7 +56,7 @@ export default async function TarificationPage() {
     if (!siteId) continue
     const activeChildren = (fam.students ?? []).filter((s) => s.status === 'active' || s.status === 'trial').length
     if (activeChildren === 0) continue
-    const rule = ruleBySite.get(siteId)
+    const rule = currentRuleBySite.get(siteId)
     const monthly = fam.custom_monthly_rate && fam.custom_monthly_rate > 0
       ? fam.custom_monthly_rate
       : rule ? monthlyForFamily(rule, activeChildren) : 0
@@ -73,7 +85,7 @@ export default async function TarificationPage() {
       <div className="mx-auto max-w-6xl">
       <TarificationManager
         sites={sites as Site[]}
-        initialRules={Array.from(ruleBySite.entries()).map(([siteId, rule]) => ({ siteId, rule }))}
+        initialRules={Array.from(rulesBySite.entries()).map(([siteId, rules]) => ({ siteId, rules }))}
         siteStats={Array.from(siteStats.entries()).map(([siteId, stats]) => ({
           siteId,
           ...stats,

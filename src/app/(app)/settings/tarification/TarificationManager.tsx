@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import {
-  CalendarClock, CheckCircle2, Equal, Euro, Home, Layers, Pencil,
-  Save, Search, Sparkles, TrendingUp, Users, Wallet, X,
+  CalendarClock, CheckCircle2, ChevronDown, Equal, Euro, Home, Layers, Plus, Pencil,
+  Save, Search, Sparkles, Trash2, TrendingUp, Users, Wallet, X,
 } from 'lucide-react'
 import type { PricingRule, Site, BillingType } from '@/types'
 import { FadeIn } from '@/components/ui/FadeIn'
@@ -46,6 +46,7 @@ const MODE_OPTIONS: Array<{ value: UiMode; label: string; description: string; i
 ]
 
 interface RuleFormState {
+  name: string
   ui_mode: UiMode
   price_per_session: string
   price_flat: string
@@ -59,18 +60,31 @@ interface RuleFormState {
   months_per_year: string
   sessions_per_month: string
   annual_discount_pct: string
+  is_active: boolean
+  effective_from: string
+  effective_until: string
 }
 
-const EMPTY_RULE_FORM: RuleFormState = {
-  ui_mode: 'monthly_per_child',
-  price_per_session: '',
-  price_flat: '',
-  price_1_child: '40', price_2_children: '35', price_3_children: '30', price_4_children: '26', price_5plus: '22',
-  registration_fee: '',
-  registration_fee_scope: 'per_child',
-  months_per_year: '10',
-  sessions_per_month: '4',
-  annual_discount_pct: '',
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function emptyRuleForm(name: string): RuleFormState {
+  return {
+    name,
+    ui_mode: 'monthly_per_child',
+    price_per_session: '',
+    price_flat: '',
+    price_1_child: '40', price_2_children: '35', price_3_children: '30', price_4_children: '26', price_5plus: '22',
+    registration_fee: '',
+    registration_fee_scope: 'per_child',
+    months_per_year: '10',
+    sessions_per_month: '4',
+    annual_discount_pct: '',
+    is_active: true,
+    effective_from: todayIso(),
+    effective_until: '',
+  }
 }
 
 function isFlatRule(rule: PricingRule): boolean {
@@ -82,10 +96,10 @@ function isFlatRule(rule: PricingRule): boolean {
     && rule.price_1_child === rule.price_5plus
 }
 
-function ruleToForm(rule: PricingRule | null): RuleFormState {
-  if (!rule) return EMPTY_RULE_FORM
+function ruleToForm(rule: PricingRule): RuleFormState {
   const flat = isFlatRule(rule)
   return {
+    name: rule.name,
     ui_mode: flat ? 'monthly_flat' : rule.billing_type,
     price_per_session: rule.price_per_session?.toString() ?? '',
     price_flat: flat ? (rule.price_1_child?.toString() ?? '') : '',
@@ -99,6 +113,9 @@ function ruleToForm(rule: PricingRule | null): RuleFormState {
     months_per_year: (rule.months_per_year ?? 10).toString(),
     sessions_per_month: (rule.sessions_per_month ?? 4).toString(),
     annual_discount_pct: rule.annual_discount_pct?.toString() ?? '',
+    is_active: rule.is_active,
+    effective_from: rule.effective_from,
+    effective_until: rule.effective_until ?? '',
   }
 }
 
@@ -117,11 +134,32 @@ function describeRule(rule: PricingRule | null): string {
   return `${rule.price_1_child} / ${rule.price_2_children} / ${rule.price_3_children} / ${rule.price_4_children} / ${rule.price_5plus}€ selon la taille de la fratrie${suffix}`
 }
 
+function sortRules(rules: PricingRule[]): PricingRule[] {
+  return [...rules].sort((a, b) => b.effective_from.localeCompare(a.effective_from))
+}
+
+// Tarif « en vigueur » : actif, deja demarre, pas encore termine, le plus
+// recent en cas de chevauchement — meme convention que generate-monthly et
+// GET /api/pricing-rules. Sert a l'affichage resume (badge, description)
+// quand la carte du site est repliee ET au badge "En vigueur" dans la liste
+// detaillee — si aucun tarif n'est reellement actif/en cours, retourne null
+// (pas de repli sur le premier tarif trouve : un tarif inactif ne doit
+// jamais s'afficher comme "en vigueur", meme s'il est le seul du site).
+function currentRuleOf(rules: PricingRule[]): PricingRule | null {
+  const today = todayIso()
+  return rules.find((r) => r.is_active && r.effective_from <= today && (!r.effective_until || r.effective_until >= today)) ?? null
+}
+
+function formatDate(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 export function TarificationManager({
   sites, initialRules, siteStats, familiesWithSpecialRate, totalMonthly, isAdmin,
 }: {
   sites: Site[]
-  initialRules: { siteId: string; rule: PricingRule }[]
+  initialRules: { siteId: string; rules: PricingRule[] }[]
   siteStats: SiteStat[]
   familiesWithSpecialRate: FamilyRate[]
   totalMonthly: number
@@ -130,14 +168,16 @@ export function TarificationManager({
   const router = useRouter()
   const [tab, setTab] = useState<'sites' | 'familles'>('sites')
 
-  const [rulesBySite, setRulesBySite] = useState<Record<string, PricingRule | null>>(() => {
-    const map: Record<string, PricingRule | null> = {}
-    for (const s of sites) map[s.id] = initialRules.find((r) => r.siteId === s.id)?.rule ?? null
+  const [rulesBySite, setRulesBySite] = useState<Record<string, PricingRule[]>>(() => {
+    const map: Record<string, PricingRule[]> = {}
+    for (const s of sites) map[s.id] = sortRules(initialRules.find((r) => r.siteId === s.id)?.rules ?? [])
     return map
   })
-  const [editingSiteId, setEditingSiteId] = useState<string | null>(null)
-  const [ruleForm, setRuleForm] = useState<RuleFormState>(EMPTY_RULE_FORM)
+  const [expandedSiteId, setExpandedSiteId] = useState<string | null>(null)
+  const [editingKey, setEditingKey] = useState<{ siteId: string; ruleId: string | null } | null>(null)
+  const [ruleForm, setRuleForm] = useState<RuleFormState>(emptyRuleForm(''))
   const [savingRule, setSavingRule] = useState(false)
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null)
 
   const [families, setFamilies] = useState(familiesWithSpecialRate)
   const [famSearch, setFamSearch] = useState('')
@@ -148,20 +188,34 @@ export function TarificationManager({
   const [rateNote, setRateNote] = useState('')
   const [savingRate, setSavingRate] = useState(false)
 
-  function startEditRule(siteId: string) {
-    setRuleForm(ruleToForm(rulesBySite[siteId] ?? null))
-    setEditingSiteId(siteId)
+  function toggleExpanded(siteId: string) {
+    setEditingKey(null)
+    setExpandedSiteId((cur) => (cur === siteId ? null : siteId))
   }
 
-  async function saveRule(siteId: string) {
-    const rule = rulesBySite[siteId]
+  function startCreateRule(site: Site) {
+    const count = (rulesBySite[site.id] ?? []).length
+    setRuleForm(emptyRuleForm(count > 0 ? `Tarif ${site.name} ${count + 1}` : `Tarif ${site.name}`))
+    setEditingKey({ siteId: site.id, ruleId: null })
+    setExpandedSiteId(site.id)
+  }
+
+  function startEditRule(siteId: string, rule: PricingRule) {
+    setRuleForm(ruleToForm(rule))
+    setEditingKey({ siteId, ruleId: rule.id })
+    setExpandedSiteId(siteId)
+  }
+
+  async function saveRule() {
+    if (!editingKey) return
+    const { siteId, ruleId } = editingKey
     // Le mode « tarif unique par enfant » (raccourci UI) se sauvegarde en
     // monthly_per_child avec les 5 paliers égaux.
     const isFlat = ruleForm.ui_mode === 'monthly_flat'
     const billingType: BillingType = ruleForm.ui_mode === 'monthly_flat' ? 'monthly_per_child' : ruleForm.ui_mode
     const payload = {
       site_id: siteId,
-      name: `Tarif ${sites.find((s) => s.id === siteId)?.name ?? ''}`.trim(),
+      name: ruleForm.name.trim() || `Tarif ${sites.find((s) => s.id === siteId)?.name ?? ''}`.trim(),
       billing_type: billingType,
       price_per_session: ruleForm.price_per_session || null,
       price_1_child: (isFlat ? ruleForm.price_flat : ruleForm.price_1_child) || null,
@@ -174,25 +228,51 @@ export function TarificationManager({
       months_per_year: ruleForm.months_per_year || '10',
       sessions_per_month: ruleForm.sessions_per_month || '4',
       annual_discount_pct: ruleForm.annual_discount_pct || null,
-      effective_from: new Date().toISOString().slice(0, 10),
+      is_active: ruleForm.is_active,
+      effective_from: ruleForm.effective_from || todayIso(),
+      effective_until: ruleForm.effective_until || null,
     }
     setSavingRule(true)
     try {
-      const res = await fetch(rule ? `/api/pricing-rules/${rule.id}` : '/api/pricing-rules', {
-        method: rule ? 'PATCH' : 'POST',
+      const res = await fetch(ruleId ? `/api/pricing-rules/${ruleId}` : '/api/pricing-rules', {
+        method: ruleId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'Impossible de sauvegarder ce tarif'); return }
-      setRulesBySite((cur) => ({ ...cur, [siteId]: data }))
+      setRulesBySite((cur) => {
+        const existing = cur[siteId] ?? []
+        const next = ruleId ? existing.map((r) => (r.id === ruleId ? (data as PricingRule) : r)) : [...existing, data as PricingRule]
+        return { ...cur, [siteId]: sortRules(next) }
+      })
       toast.success('Tarif enregistré')
-      setEditingSiteId(null)
+      setEditingKey(null)
       router.refresh()
     } catch {
       toast.error('Erreur réseau')
     } finally {
       setSavingRule(false)
+    }
+  }
+
+  async function deleteRule(siteId: string, rule: PricingRule) {
+    if (!confirm(`Supprimer définitivement le tarif « ${rule.name} » ?\n\nCette action est irréversible.`)) return
+    setDeletingRuleId(rule.id)
+    try {
+      const res = await fetch(`/api/pricing-rules/${rule.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error ?? 'Impossible de supprimer ce tarif')
+        return
+      }
+      setRulesBySite((cur) => ({ ...cur, [siteId]: (cur[siteId] ?? []).filter((r) => r.id !== rule.id) }))
+      toast.success('Tarif supprimé')
+      router.refresh()
+    } catch {
+      toast.error('Erreur réseau')
+    } finally {
+      setDeletingRuleId(null)
     }
   }
 
@@ -248,9 +328,12 @@ export function TarificationManager({
     }
   }
 
-  const configuredCount = sites.filter((s) => rulesBySite[s.id]).length
+  const configuredCount = sites.filter((s) => currentRuleOf(rulesBySite[s.id] ?? [])).length
   const totalAnnual = useMemo(
-    () => siteStats.reduce((sum, s) => sum + s.monthly * (rulesBySite[s.siteId]?.months_per_year ?? 10), 0),
+    () => siteStats.reduce((sum, s) => {
+      const rule = currentRuleOf(rulesBySite[s.siteId] ?? [])
+      return sum + s.monthly * (rule?.months_per_year ?? 10)
+    }, 0),
     [siteStats, rulesBySite]
   )
   const revenueBars = useMemo(
@@ -284,15 +367,16 @@ export function TarificationManager({
               <div className="max-w-3xl">
                 <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Tarification</h2>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Un tarif par site — dégressif par fratrie, mensuel fixe, forfait famille ou par séance — avec
-                  frais d&apos;inscription, mensualités par an, remise paiement annuel, et tarif spécial par
-                  famille qui prend toujours priorité.
+                  Crée, modifie ou supprime autant de tarifs que tu veux par site — dégressif par fratrie,
+                  mensuel fixe, forfait famille ou par séance — avec frais d&apos;inscription, mensualités
+                  par an, remise paiement annuel, dates de validité, et tarif spécial par famille qui prend
+                  toujours priorité.
                 </p>
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <HeroMetric icon={Layers} label="Sites" value={sites.length} helper="au total" />
-                <HeroMetric icon={CheckCircle2} label="Tarifs actifs" value={configuredCount} helper={`sur ${sites.length}`} />
+                <HeroMetric icon={CheckCircle2} label="Tarifs en vigueur" value={configuredCount} helper={`sur ${sites.length} sites`} />
                 <HeroMetric icon={Users} label="Tarifs spéciaux" value={families.length} helper="familles aidées" />
                 <HeroMetric icon={Wallet} label="Total mensuel" value={`${totalMonthly.toFixed(0)}€`} helper="tous sites" />
               </div>
@@ -371,195 +455,142 @@ export function TarificationManager({
       {tab === 'sites' && (
         <div className="space-y-3">
           {sites.map((site, index) => {
-            const rule = rulesBySite[site.id] ?? null
+            const rules = rulesBySite[site.id] ?? []
+            const rule = currentRuleOf(rules)
             const stats = siteStats.find((s) => s.siteId === site.id)
-            const isEditing = editingSiteId === site.id
+            const isExpanded = expandedSiteId === site.id
+            const isCreatingHere = editingKey?.siteId === site.id && editingKey.ruleId === null
             const siteColor = site.color || '#6366f1'
             return (
               <FadeIn key={site.id} delay={90 + index * 45} from="bottom">
-                <article className={cn(
-                  'rounded-xl border border-border bg-card p-4 transition',
-                  !isEditing && 'hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm'
-                )}>
-                  {isEditing ? (
-                    <div>
-                      <div className="mb-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                            style={{ backgroundColor: `${siteColor}22`, color: siteColor }}
-                          >
-                            <Euro className="h-4 w-4" />
-                          </div>
-                          <h3 className="text-sm font-semibold text-foreground">Tarif — {site.name}</h3>
-                        </div>
-                        <button type="button" onClick={() => setEditingSiteId(null)} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Mode de facturation</label>
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          {MODE_OPTIONS.map((opt) => {
-                            const Icon = opt.icon
-                            const active = ruleForm.ui_mode === opt.value
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setRuleForm((f) => ({ ...f, ui_mode: opt.value }))}
-                                className={cn(
-                                  'flex items-start gap-3 rounded-xl border p-3 text-left transition',
-                                  active
-                                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                                    : 'border-border bg-background hover:border-primary/30'
-                                )}
-                              >
-                                <div className={cn(
-                                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                                  active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
-                                )}>
-                                  <Icon className="h-4 w-4" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className={cn('text-sm font-semibold', active ? 'text-primary' : 'text-foreground')}>{opt.label}</p>
-                                  <p className="text-xs leading-4 text-muted-foreground">{opt.description}</p>
-                                </div>
-                              </button>
-                            )
-                          })}
-                        </div>
-                      </div>
-
-                      {ruleForm.ui_mode === 'per_session' && (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <Field label="Tarif (€ / séance / enfant)">
-                            <input type="number" step="0.01" value={ruleForm.price_per_session} onChange={(e) => setRuleForm((f) => ({ ...f, price_per_session: e.target.value }))} className={inputCls} />
-                          </Field>
-                          <Field label="Séances par mois">
-                            <input type="number" min="1" max="31" value={ruleForm.sessions_per_month} onChange={(e) => setRuleForm((f) => ({ ...f, sessions_per_month: e.target.value }))} className={inputCls} />
-                          </Field>
-                        </div>
-                      )}
-                      {ruleForm.ui_mode === 'monthly_family' && (
-                        <div className="mt-3">
-                          <Field label="Forfait (€ / mois / famille)">
-                            <input type="number" step="0.01" value={ruleForm.price_1_child} onChange={(e) => setRuleForm((f) => ({ ...f, price_1_child: e.target.value }))} className={inputCls} />
-                          </Field>
-                        </div>
-                      )}
-                      {ruleForm.ui_mode === 'monthly_flat' && (
-                        <div className="mt-3">
-                          <Field label="Tarif (€ / mois / enfant)">
-                            <input type="number" step="0.01" value={ruleForm.price_flat} onChange={(e) => setRuleForm((f) => ({ ...f, price_flat: e.target.value }))} className={inputCls} />
-                          </Field>
-                        </div>
-                      )}
-                      {ruleForm.ui_mode === 'monthly_per_child' && (
-                        <div className="mt-3">
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif par enfant selon la taille de la fratrie (€/mois)</label>
-                          <div className="grid grid-cols-5 gap-2">
-                            {([
-                              ['price_1_child', '1 enfant'],
-                              ['price_2_children', '2 enfants'],
-                              ['price_3_children', '3 enfants'],
-                              ['price_4_children', '4 enfants'],
-                              ['price_5plus', '5+ enfants'],
-                            ] as const).map(([key, label]) => (
-                              <div key={key}>
-                                <input
-                                  type="number" step="0.01"
-                                  value={ruleForm[key]}
-                                  onChange={(e) => setRuleForm((f) => ({ ...f, [key]: e.target.value }))}
-                                  placeholder={label}
-                                  className="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
-                                />
-                                <p className="mt-1 text-center text-[10px] text-muted-foreground">{label}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Options communes à tous les modes */}
-                      <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
-                        <div className="mb-3 flex items-center gap-2">
-                          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted text-foreground">
-                            <Sparkles className="h-3.5 w-3.5" />
-                          </div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Options avancées</p>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-4">
-                          <Field label="Frais d'inscription (€, une fois)">
-                            <input type="number" step="0.01" min="0" value={ruleForm.registration_fee} onChange={(e) => setRuleForm((f) => ({ ...f, registration_fee: e.target.value }))} placeholder="0 = aucun" className={inputCls} />
-                          </Field>
-                          <Field label="Frais appliqués">
-                            <select value={ruleForm.registration_fee_scope} onChange={(e) => setRuleForm((f) => ({ ...f, registration_fee_scope: e.target.value as 'per_child' | 'per_family' }))} className={inputCls}>
-                              <option value="per_child">Par enfant</option>
-                              <option value="per_family">Par famille</option>
-                            </select>
-                          </Field>
-                          <Field label="Mensualités par an">
-                            <input type="number" min="1" max="12" value={ruleForm.months_per_year} onChange={(e) => setRuleForm((f) => ({ ...f, months_per_year: e.target.value }))} className={inputCls} />
-                          </Field>
-                          <Field label="Remise paiement annuel (%)">
-                            <input type="number" step="0.5" min="0" max="100" value={ruleForm.annual_discount_pct} onChange={(e) => setRuleForm((f) => ({ ...f, annual_discount_pct: e.target.value }))} placeholder="0 = aucune" className={inputCls} />
-                          </Field>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex items-center justify-end gap-2">
-                        <button type="button" onClick={() => setEditingSiteId(null)} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent">
-                          <X className="h-4 w-4" />Annuler
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void saveRule(site.id)}
-                          disabled={savingRule}
-                          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
-                        >
-                          <Save className="h-4 w-4" />{savingRule ? 'Sauvegarde…' : 'Enregistrer'}
-                        </button>
-                      </div>
+                <article className="rounded-xl border border-border bg-card p-4 transition hover:border-primary/20">
+                  {/* Résumé toujours visible */}
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                      style={{ backgroundColor: `${siteColor}22`, color: siteColor }}
+                    >
+                      <Euro className="h-5 w-5" />
                     </div>
-                  ) : (
-                    <div className="flex flex-wrap items-center gap-4">
-                      <div
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: `${siteColor}22`, color: siteColor }}
-                      >
-                        <Euro className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-[200px] flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-semibold text-foreground">{site.name}</h3>
-                          <span className={cn(
-                            'rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                            rule ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-                          )}>
-                            {rule ? (isFlatRule(rule) ? 'Mensuel fixe' : MODE_LABELS[rule.billing_type]) : 'Non configuré'}
+                    <div className="min-w-[200px] flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-foreground">{site.name}</h3>
+                        <span className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          rule ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                        )}>
+                          {rule ? (isFlatRule(rule) ? 'Mensuel fixe' : MODE_LABELS[rule.billing_type]) : 'Non configuré'}
+                        </span>
+                        {rules.length > 1 && (
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            {rules.length} tarifs
                           </span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{describeRule(rule)}</p>
-                        {stats && stats.pctRevenue > 0 && (
-                          <div className="mt-2 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full" style={{ width: `${Math.max(stats.pctRevenue, 3)}%`, backgroundColor: siteColor }} />
-                          </div>
                         )}
                       </div>
-                      {stats && (
-                        <div className="flex gap-4">
-                          <Stat value={stats.families} label="familles" />
-                          <Stat value={stats.children} label="enfants" />
-                          <Stat value={`${stats.monthly.toFixed(0)}€`} label="/ mois" mono accent />
-                          <Stat value={`${(stats.monthly * (rule?.months_per_year ?? 10)).toFixed(0)}€`} label="/ an" mono />
-                          <Stat value={`${stats.pctRevenue}%`} label="du CA" />
+                      <p className="mt-1 text-xs text-muted-foreground">{describeRule(rule)}</p>
+                      {stats && stats.pctRevenue > 0 && (
+                        <div className="mt-2 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full" style={{ width: `${Math.max(stats.pctRevenue, 3)}%`, backgroundColor: siteColor }} />
                         </div>
                       )}
-                      {isAdmin && (
-                        <button type="button" onClick={() => startEditRule(site.id)} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition hover:border-primary/40 hover:bg-accent">
-                          <Pencil className="h-3.5 w-3.5" />Modifier
+                    </div>
+                    {stats && (
+                      <div className="flex gap-4">
+                        <Stat value={stats.families} label="familles" />
+                        <Stat value={stats.children} label="enfants" />
+                        <Stat value={`${stats.monthly.toFixed(0)}€`} label="/ mois" mono accent />
+                        <Stat value={`${(stats.monthly * (rule?.months_per_year ?? 10)).toFixed(0)}€`} label="/ an" mono />
+                        <Stat value={`${stats.pctRevenue}%`} label="du CA" />
+                      </div>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(site.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition hover:border-primary/40 hover:bg-accent"
+                      >
+                        Gérer les tarifs ({rules.length})
+                        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Panneau de gestion complète (créer / modifier / supprimer) */}
+                  {isExpanded && isAdmin && (
+                    <div className="mt-4 space-y-2 border-t border-border pt-4">
+                      {rules.length === 0 && !isCreatingHere && (
+                        <p className="text-sm text-muted-foreground">Aucun tarif pour ce site pour le moment.</p>
+                      )}
+
+                      {rules.map((r) => (
+                        editingKey?.ruleId === r.id ? (
+                          <RuleEditor
+                            key={r.id}
+                            form={ruleForm}
+                            setForm={setRuleForm}
+                            saving={savingRule}
+                            onSave={() => void saveRule()}
+                            onCancel={() => setEditingKey(null)}
+                          />
+                        ) : (
+                          <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background p-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-sm font-semibold text-foreground">{r.name}</p>
+                                <span className={cn(
+                                  'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+                                  r.is_active
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                    : 'bg-muted text-muted-foreground'
+                                )}>
+                                  {r.is_active ? 'Actif' : 'Inactif'}
+                                </span>
+                                {r === rule && (
+                                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">En vigueur</span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{describeRule(r)}</p>
+                              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                Depuis le {formatDate(r.effective_from)}
+                                {r.effective_until ? ` jusqu'au ${formatDate(r.effective_until)}` : ''}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEditRule(site.id, r)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium transition hover:border-primary/40 hover:bg-accent"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />Modifier
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void deleteRule(site.id, r)}
+                                disabled={deletingRuleId === r.id}
+                                className="inline-flex items-center gap-1 rounded-lg border border-destructive/30 px-2.5 py-1.5 text-xs font-medium text-destructive transition hover:bg-destructive/10 disabled:opacity-60"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />{deletingRuleId === r.id ? 'Suppression…' : 'Supprimer'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      ))}
+
+                      {isCreatingHere ? (
+                        <RuleEditor
+                          form={ruleForm}
+                          setForm={setRuleForm}
+                          saving={savingRule}
+                          onSave={() => void saveRule()}
+                          onCancel={() => setEditingKey(null)}
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startCreateRule(site)}
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-2.5 text-xs font-semibold text-muted-foreground transition hover:border-primary/40 hover:text-primary"
+                        >
+                          <Plus className="h-3.5 w-3.5" />Nouveau tarif pour {site.name}
                         </button>
                       )}
                     </div>
@@ -677,6 +708,179 @@ export function TarificationManager({
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function RuleEditor({
+  form, setForm, saving, onSave, onCancel,
+}: {
+  form: RuleFormState
+  setForm: React.Dispatch<React.SetStateAction<RuleFormState>>
+  saving: boolean
+  onSave: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/[0.03] p-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <input
+          value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          placeholder="Nom du tarif (ex. Tarif standard, Tarif solidaire…)"
+          className="min-w-0 flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+        <button type="button" onClick={onCancel} className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Mode de facturation</label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {MODE_OPTIONS.map((opt) => {
+            const Icon = opt.icon
+            const active = form.ui_mode === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, ui_mode: opt.value }))}
+                className={cn(
+                  'flex items-start gap-3 rounded-xl border p-3 text-left transition',
+                  active
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                    : 'border-border bg-background hover:border-primary/30'
+                )}
+              >
+                <div className={cn(
+                  'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                  active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                )}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className={cn('text-sm font-semibold', active ? 'text-primary' : 'text-foreground')}>{opt.label}</p>
+                  <p className="text-xs leading-4 text-muted-foreground">{opt.description}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {form.ui_mode === 'per_session' && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Tarif (€ / séance / enfant)">
+            <input type="number" step="0.01" value={form.price_per_session} onChange={(e) => setForm((f) => ({ ...f, price_per_session: e.target.value }))} className={inputCls} />
+          </Field>
+          <Field label="Séances par mois">
+            <input type="number" min="1" max="31" value={form.sessions_per_month} onChange={(e) => setForm((f) => ({ ...f, sessions_per_month: e.target.value }))} className={inputCls} />
+          </Field>
+        </div>
+      )}
+      {form.ui_mode === 'monthly_family' && (
+        <div className="mt-3">
+          <Field label="Forfait (€ / mois / famille)">
+            <input type="number" step="0.01" value={form.price_1_child} onChange={(e) => setForm((f) => ({ ...f, price_1_child: e.target.value }))} className={inputCls} />
+          </Field>
+        </div>
+      )}
+      {form.ui_mode === 'monthly_flat' && (
+        <div className="mt-3">
+          <Field label="Tarif (€ / mois / enfant)">
+            <input type="number" step="0.01" value={form.price_flat} onChange={(e) => setForm((f) => ({ ...f, price_flat: e.target.value }))} className={inputCls} />
+          </Field>
+        </div>
+      )}
+      {form.ui_mode === 'monthly_per_child' && (
+        <div className="mt-3">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif par enfant selon la taille de la fratrie (€/mois)</label>
+          <div className="grid grid-cols-5 gap-2">
+            {([
+              ['price_1_child', '1 enfant'],
+              ['price_2_children', '2 enfants'],
+              ['price_3_children', '3 enfants'],
+              ['price_4_children', '4 enfants'],
+              ['price_5plus', '5+ enfants'],
+            ] as const).map(([key, label]) => (
+              <div key={key}>
+                <input
+                  type="number" step="0.01"
+                  value={form[key]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder={label}
+                  className="w-full rounded-lg border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <p className="mt-1 text-center text-[10px] text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Options avancées */}
+      <div className="mt-4 rounded-xl border border-border bg-muted/20 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted text-foreground">
+            <Sparkles className="h-3.5 w-3.5" />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Options avancées</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Field label="Frais d'inscription (€, une fois)">
+            <input type="number" step="0.01" min="0" value={form.registration_fee} onChange={(e) => setForm((f) => ({ ...f, registration_fee: e.target.value }))} placeholder="0 = aucun" className={inputCls} />
+          </Field>
+          <Field label="Frais appliqués">
+            <select value={form.registration_fee_scope} onChange={(e) => setForm((f) => ({ ...f, registration_fee_scope: e.target.value as 'per_child' | 'per_family' }))} className={inputCls}>
+              <option value="per_child">Par enfant</option>
+              <option value="per_family">Par famille</option>
+            </select>
+          </Field>
+          <Field label="Mensualités par an">
+            <input type="number" min="1" max="12" value={form.months_per_year} onChange={(e) => setForm((f) => ({ ...f, months_per_year: e.target.value }))} className={inputCls} />
+          </Field>
+          <Field label="Remise paiement annuel (%)">
+            <input type="number" step="0.5" min="0" max="100" value={form.annual_discount_pct} onChange={(e) => setForm((f) => ({ ...f, annual_discount_pct: e.target.value }))} placeholder="0 = aucune" className={inputCls} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Validité */}
+      <div className="mt-3 rounded-xl border border-border bg-muted/20 p-4">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted text-foreground">
+            <CalendarClock className="h-3.5 w-3.5" />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Validité</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="En vigueur à partir du">
+            <input type="date" value={form.effective_from} onChange={(e) => setForm((f) => ({ ...f, effective_from: e.target.value }))} className={inputCls} />
+          </Field>
+          <Field label="Jusqu'au (optionnel)">
+            <input type="date" value={form.effective_until} onChange={(e) => setForm((f) => ({ ...f, effective_until: e.target.value }))} className={inputCls} />
+          </Field>
+          <label className="flex items-center gap-2 self-end rounded-lg border border-input bg-background px-3 py-2 text-sm">
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} className="h-4 w-4 rounded border-input" />
+            Tarif actif
+          </label>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <button type="button" onClick={onCancel} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent">
+          <X className="h-4 w-4" />Annuler
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60"
+        >
+          <Save className="h-4 w-4" />{saving ? 'Sauvegarde…' : 'Enregistrer'}
+        </button>
+      </div>
     </div>
   )
 }
