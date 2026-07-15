@@ -455,6 +455,12 @@ export interface PricingRule {
   price_3_children: number | null
   price_4_children: number | null
   price_5plus: number | null
+  // Options étendues (migration 019)
+  registration_fee: number | null
+  registration_fee_scope: 'per_child' | 'per_family'
+  months_per_year: number
+  sessions_per_month: number
+  annual_discount_pct: number | null
   effective_from: string
   effective_until: string | null
   is_active: boolean

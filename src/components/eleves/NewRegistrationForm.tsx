@@ -272,10 +272,11 @@ export function NewRegistrationForm({
     if (!pricingRule || activeNames.length === 0) return { mode: 'none', items: [], month: 0 }
 
     if (pricingRule.billing_type === 'per_session') {
-      const perChild = (pricingRule.price_per_session ?? 0) * 4
+      const sessions = pricingRule.sessions_per_month && pricingRule.sessions_per_month > 0 ? pricingRule.sessions_per_month : 4
+      const perChild = (pricingRule.price_per_session ?? 0) * sessions
       return {
         mode: 'per_session',
-        items: activeNames.map((name) => ({ name, price: perChild, tag: `${pricingRule.price_per_session}€ × 4` })),
+        items: activeNames.map((name) => ({ name, price: perChild, tag: `${pricingRule.price_per_session}€ × ${sessions}` })),
         month: perChild * activeNames.length,
       }
     }
@@ -852,11 +853,27 @@ export function NewRegistrationForm({
                 </div>
               ))}
             </div>
+            {/* Frais d'inscription (une fois) — configurés dans le tarif du site */}
+            {pricing.mode !== 'special' && pricingRule?.registration_fee != null && pricingRule.registration_fee > 0 && activeNames.length > 0 && (
+              <div className="mt-2 flex items-center justify-between border-t border-dashed border-border pt-2 text-[11px]">
+                <span className="text-muted-foreground">
+                  Frais d&apos;inscription ({(pricingRule.registration_fee_scope ?? 'per_child') === 'per_family' ? 'par famille' : `${pricingRule.registration_fee}€ × ${activeNames.length}`}, une seule fois)
+                </span>
+                <span className="font-mono font-semibold text-amber-600">
+                  {((pricingRule.registration_fee_scope ?? 'per_child') === 'per_family' ? pricingRule.registration_fee : pricingRule.registration_fee * activeNames.length).toFixed(0)} €
+                </span>
+              </div>
+            )}
             <div className="mt-3 flex items-baseline justify-between border-t border-border pt-3">
               <span className="text-[11px] font-semibold text-muted-foreground">Total mensuel</span>
               <span className="font-mono text-xl font-bold">{pricing.month.toFixed(0)} €</span>
             </div>
-            <div className="text-right font-mono text-[11px] font-semibold text-emerald-600">{(pricing.month * 10).toFixed(0)} € / an (10 mois)</div>
+            <div className="text-right font-mono text-[11px] font-semibold text-emerald-600">
+              {(pricing.month * (pricingRule?.months_per_year ?? 10)).toFixed(0)} € / an ({pricingRule?.months_per_year ?? 10} mois)
+              {pricingRule?.annual_discount_pct != null && pricingRule.annual_discount_pct > 0 && pricing.mode !== 'special' && (
+                <span className="ml-1 text-muted-foreground">· {(pricing.month * (pricingRule?.months_per_year ?? 10) * (1 - pricingRule.annual_discount_pct / 100)).toFixed(0)} € si payé en une fois (-{pricingRule.annual_discount_pct}%)</span>
+              )}
+            </div>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4">

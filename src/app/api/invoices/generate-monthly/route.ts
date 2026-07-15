@@ -45,6 +45,7 @@ interface DBPricingRule {
   price_3_children:   number | null
   price_4_children:   number | null
   price_5plus:        number | null
+  sessions_per_month: number | null
   is_active: boolean
 }
 
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
   // ── 2. Tarifs actifs ───────────────────────────────────────────────────────
   const { data: rules, error: rulesErr } = await admin
     .from('pricing_rules')
-    .select('id, site_id, billing_type, price_per_session, price_1_child, price_2_children, price_3_children, price_4_children, price_5plus, is_active')
+    .select('id, site_id, billing_type, price_per_session, price_1_child, price_2_children, price_3_children, price_4_children, price_5plus, sessions_per_month, is_active')
     .eq('organization_id', ctx.organizationId)
     .eq('is_active', true)
 
@@ -196,8 +197,24 @@ export async function POST(req: NextRequest) {
             unit_price: total,
             total,
           })
+        } else if (rule.billing_type === 'per_session') {
+          // Facturation au forfait de séances configuré sur le tarif du site
+          // (sessions_per_month, défaut 4). Le décompte réel des présences
+          // pourra affiner plus tard — même convention que le legacy.
+          const sessions = rule.sessions_per_month && rule.sessions_per_month > 0 ? rule.sessions_per_month : 4
+          const perChild = Number(rule.price_per_session ?? 0) * sessions
+          const total = perChild * students.length
+          amountDue += total
+          for (const s of students) {
+            lineItems.push({
+              description: `Séances (${sessions}/mois) — ${new Date(year, month - 1, 1).toLocaleString('fr-FR', { month: 'long', year: 'numeric' })}`,
+              student_name: `${s.first_name} ${s.last_name}`,
+              quantity: sessions,
+              unit_price: Number(rule.price_per_session ?? 0),
+              total: perChild,
+            })
+          }
         }
-        // per_session: not computed here (requires session count — future)
       }
     }
 

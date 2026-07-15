@@ -17,6 +17,21 @@ const UpdatePricingRuleSchema = z.object({
   price_3_children: numberOrNull.optional(),
   price_4_children: numberOrNull.optional(),
   price_5plus: numberOrNull.optional(),
+  // Options étendues (migration 019)
+  registration_fee: numberOrNull.optional(),
+  registration_fee_scope: z.enum(['per_child', 'per_family']).optional(),
+  months_per_year: z.preprocess(
+    (value) => value === '' || value === null || value === undefined ? undefined : Number(value),
+    z.number().int().min(1).max(12)
+  ).optional(),
+  sessions_per_month: z.preprocess(
+    (value) => value === '' || value === null || value === undefined ? undefined : Number(value),
+    z.number().int().min(1).max(31)
+  ).optional(),
+  annual_discount_pct: z.preprocess(
+    (value) => value === '' || value === null || value === undefined ? null : Number(value),
+    z.number().min(0).max(100).nullable()
+  ).optional(),
   effective_from: z.string().min(10).max(10).optional(),
   effective_until: z.string().min(10).max(10).nullable().optional(),
   is_active: z.boolean().optional(),

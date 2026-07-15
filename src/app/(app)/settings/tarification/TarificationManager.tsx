@@ -29,40 +29,80 @@ const MODE_LABELS: Record<BillingType, string> = {
   monthly_family: 'Forfait famille',
 }
 
+// Mode d'affichage du formulaire : « flat » est un raccourci UI (tarif unique
+// par enfant) qui se sauvegarde en monthly_per_child avec 5 paliers égaux.
+type UiMode = BillingType | 'monthly_flat'
+
 interface RuleFormState {
-  billing_type: BillingType
+  ui_mode: UiMode
   price_per_session: string
+  price_flat: string
   price_1_child: string
   price_2_children: string
   price_3_children: string
   price_4_children: string
   price_5plus: string
+  registration_fee: string
+  registration_fee_scope: 'per_child' | 'per_family'
+  months_per_year: string
+  sessions_per_month: string
+  annual_discount_pct: string
 }
 
 const EMPTY_RULE_FORM: RuleFormState = {
-  billing_type: 'monthly_per_child',
+  ui_mode: 'monthly_per_child',
   price_per_session: '',
+  price_flat: '',
   price_1_child: '40', price_2_children: '35', price_3_children: '30', price_4_children: '26', price_5plus: '22',
+  registration_fee: '',
+  registration_fee_scope: 'per_child',
+  months_per_year: '10',
+  sessions_per_month: '4',
+  annual_discount_pct: '',
+}
+
+function isFlatRule(rule: PricingRule): boolean {
+  return rule.billing_type === 'monthly_per_child'
+    && rule.price_1_child !== null
+    && rule.price_1_child === rule.price_2_children
+    && rule.price_1_child === rule.price_3_children
+    && rule.price_1_child === rule.price_4_children
+    && rule.price_1_child === rule.price_5plus
 }
 
 function ruleToForm(rule: PricingRule | null): RuleFormState {
   if (!rule) return EMPTY_RULE_FORM
+  const flat = isFlatRule(rule)
   return {
-    billing_type: rule.billing_type,
+    ui_mode: flat ? 'monthly_flat' : rule.billing_type,
     price_per_session: rule.price_per_session?.toString() ?? '',
+    price_flat: flat ? (rule.price_1_child?.toString() ?? '') : '',
     price_1_child: rule.price_1_child?.toString() ?? '',
     price_2_children: rule.price_2_children?.toString() ?? '',
     price_3_children: rule.price_3_children?.toString() ?? '',
     price_4_children: rule.price_4_children?.toString() ?? '',
     price_5plus: rule.price_5plus?.toString() ?? '',
+    registration_fee: rule.registration_fee?.toString() ?? '',
+    registration_fee_scope: rule.registration_fee_scope ?? 'per_child',
+    months_per_year: (rule.months_per_year ?? 10).toString(),
+    sessions_per_month: (rule.sessions_per_month ?? 4).toString(),
+    annual_discount_pct: rule.annual_discount_pct?.toString() ?? '',
   }
 }
 
 function describeRule(rule: PricingRule | null): string {
   if (!rule) return 'Aucun tarif configuré'
-  if (rule.billing_type === 'per_session') return `${rule.price_per_session}€ / séance / enfant`
-  if (rule.billing_type === 'monthly_family') return `${rule.price_1_child}€ / mois / famille (forfait)`
-  return `${rule.price_1_child} / ${rule.price_2_children} / ${rule.price_3_children} / ${rule.price_4_children} / ${rule.price_5plus}€ selon la taille de la fratrie`
+  const extras: string[] = []
+  if (rule.registration_fee && rule.registration_fee > 0) {
+    extras.push(`+ ${rule.registration_fee}€ d'inscription (${rule.registration_fee_scope === 'per_family' ? 'par famille' : 'par enfant'})`)
+  }
+  if (rule.months_per_year && rule.months_per_year !== 10) extras.push(`${rule.months_per_year} mensualités/an`)
+  if (rule.annual_discount_pct && rule.annual_discount_pct > 0) extras.push(`-${rule.annual_discount_pct}% si paiement annuel`)
+  const suffix = extras.length > 0 ? ` · ${extras.join(' · ')}` : ''
+  if (rule.billing_type === 'per_session') return `${rule.price_per_session}€ / séance / enfant (${rule.sessions_per_month ?? 4} séances/mois)${suffix}`
+  if (rule.billing_type === 'monthly_family') return `${rule.price_1_child}€ / mois / famille (forfait)${suffix}`
+  if (isFlatRule(rule)) return `${rule.price_1_child}€ / mois / enfant (tarif unique)${suffix}`
+  return `${rule.price_1_child} / ${rule.price_2_children} / ${rule.price_3_children} / ${rule.price_4_children} / ${rule.price_5plus}€ selon la taille de la fratrie${suffix}`
 }
 
 export function TarificationManager({
@@ -103,16 +143,25 @@ export function TarificationManager({
 
   async function saveRule(siteId: string) {
     const rule = rulesBySite[siteId]
+    // Le mode « tarif unique par enfant » (raccourci UI) se sauvegarde en
+    // monthly_per_child avec les 5 paliers égaux.
+    const isFlat = ruleForm.ui_mode === 'monthly_flat'
+    const billingType: BillingType = ruleForm.ui_mode === 'monthly_flat' ? 'monthly_per_child' : ruleForm.ui_mode
     const payload = {
       site_id: siteId,
       name: `Tarif ${sites.find((s) => s.id === siteId)?.name ?? ''}`.trim(),
-      billing_type: ruleForm.billing_type,
+      billing_type: billingType,
       price_per_session: ruleForm.price_per_session || null,
-      price_1_child: ruleForm.price_1_child || null,
-      price_2_children: ruleForm.price_2_children || null,
-      price_3_children: ruleForm.price_3_children || null,
-      price_4_children: ruleForm.price_4_children || null,
-      price_5plus: ruleForm.price_5plus || null,
+      price_1_child: (isFlat ? ruleForm.price_flat : ruleForm.price_1_child) || null,
+      price_2_children: (isFlat ? ruleForm.price_flat : ruleForm.price_2_children) || null,
+      price_3_children: (isFlat ? ruleForm.price_flat : ruleForm.price_3_children) || null,
+      price_4_children: (isFlat ? ruleForm.price_flat : ruleForm.price_4_children) || null,
+      price_5plus: (isFlat ? ruleForm.price_flat : ruleForm.price_5plus) || null,
+      registration_fee: ruleForm.registration_fee || null,
+      registration_fee_scope: ruleForm.registration_fee_scope,
+      months_per_year: ruleForm.months_per_year || '10',
+      sessions_per_month: ruleForm.sessions_per_month || '4',
+      annual_discount_pct: ruleForm.annual_discount_pct || null,
       effective_from: new Date().toISOString().slice(0, 10),
     }
     setSavingRule(true)
@@ -193,7 +242,7 @@ export function TarificationManager({
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Organisation</p>
         <h2 className="mt-1 text-xl font-semibold text-foreground">Tarification</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Un tarif par site (dégressif, par séance ou forfait famille), avec possibilité d&apos;un tarif spécial par famille qui prend toujours priorité.
+          Un tarif par site — dégressif par fratrie, mensuel fixe, forfait famille ou par séance — avec frais d&apos;inscription, mensualités par an, remise paiement annuel, et tarif spécial par famille qui prend toujours priorité.
         </p>
         {!isAdmin && (
           <p className="mt-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
@@ -225,29 +274,42 @@ export function TarificationManager({
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Mode de facturation</label>
                         <select
-                          value={ruleForm.billing_type}
-                          onChange={(e) => setRuleForm((f) => ({ ...f, billing_type: e.target.value as BillingType }))}
+                          value={ruleForm.ui_mode}
+                          onChange={(e) => setRuleForm((f) => ({ ...f, ui_mode: e.target.value as UiMode }))}
                           className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                         >
-                          <option value="monthly_per_child">Dégressif standard (par enfant, selon la fratrie)</option>
-                          <option value="per_session">Par séance</option>
+                          <option value="monthly_per_child">Dégressif par fratrie (5 paliers)</option>
+                          <option value="monthly_flat">Mensuel fixe par enfant (tarif unique)</option>
                           <option value="monthly_family">Forfait famille (montant fixe)</option>
+                          <option value="per_session">Par séance</option>
                         </select>
                       </div>
-                      {ruleForm.billing_type === 'per_session' && (
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif (€ / séance / enfant)</label>
-                          <input type="number" step="0.01" value={ruleForm.price_per_session} onChange={(e) => setRuleForm((f) => ({ ...f, price_per_session: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                        </div>
+                      {ruleForm.ui_mode === 'per_session' && (
+                        <>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif (€ / séance / enfant)</label>
+                            <input type="number" step="0.01" value={ruleForm.price_per_session} onChange={(e) => setRuleForm((f) => ({ ...f, price_per_session: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                          </div>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Séances par mois</label>
+                            <input type="number" min="1" max="31" value={ruleForm.sessions_per_month} onChange={(e) => setRuleForm((f) => ({ ...f, sessions_per_month: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                          </div>
+                        </>
                       )}
-                      {ruleForm.billing_type === 'monthly_family' && (
+                      {ruleForm.ui_mode === 'monthly_family' && (
                         <div>
                           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Forfait (€ / mois / famille)</label>
                           <input type="number" step="0.01" value={ruleForm.price_1_child} onChange={(e) => setRuleForm((f) => ({ ...f, price_1_child: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
                         </div>
                       )}
+                      {ruleForm.ui_mode === 'monthly_flat' && (
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif (€ / mois / enfant)</label>
+                          <input type="number" step="0.01" value={ruleForm.price_flat} onChange={(e) => setRuleForm((f) => ({ ...f, price_flat: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                        </div>
+                      )}
                     </div>
-                    {ruleForm.billing_type === 'monthly_per_child' && (
+                    {ruleForm.ui_mode === 'monthly_per_child' && (
                       <div className="mt-3">
                         <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Tarif par enfant selon la taille de la fratrie (€/mois)</label>
                         <div className="grid grid-cols-5 gap-2">
@@ -272,6 +334,31 @@ export function TarificationManager({
                         </div>
                       </div>
                     )}
+                    {/* Options communes à tous les modes */}
+                    <div className="mt-4 rounded-lg border border-dashed border-border bg-muted/20 p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Options</p>
+                      <div className="grid gap-3 sm:grid-cols-4">
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Frais d&apos;inscription (€, une fois)</label>
+                          <input type="number" step="0.01" min="0" value={ruleForm.registration_fee} onChange={(e) => setRuleForm((f) => ({ ...f, registration_fee: e.target.value }))} placeholder="0 = aucun" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Frais appliqués</label>
+                          <select value={ruleForm.registration_fee_scope} onChange={(e) => setRuleForm((f) => ({ ...f, registration_fee_scope: e.target.value as 'per_child' | 'per_family' }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+                            <option value="per_child">Par enfant</option>
+                            <option value="per_family">Par famille</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Mensualités par an</label>
+                          <input type="number" min="1" max="12" value={ruleForm.months_per_year} onChange={(e) => setRuleForm((f) => ({ ...f, months_per_year: e.target.value }))} className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                        </div>
+                        <div>
+                          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Remise paiement annuel (%)</label>
+                          <input type="number" step="0.5" min="0" max="100" value={ruleForm.annual_discount_pct} onChange={(e) => setRuleForm((f) => ({ ...f, annual_discount_pct: e.target.value }))} placeholder="0 = aucune" className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                        </div>
+                      </div>
+                    </div>
                     <div className="mt-3 flex items-center justify-end gap-2">
                       <button type="button" onClick={() => setEditingSiteId(null)} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm hover:bg-accent"><X className="h-4 w-4" />Annuler</button>
                       <button type="button" onClick={() => void saveRule(site.id)} disabled={savingRule} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"><Save className="h-4 w-4" />{savingRule ? 'Sauvegarde…' : 'Enregistrer'}</button>
@@ -285,7 +372,7 @@ export function TarificationManager({
                     <div className="min-w-[180px] flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-foreground">{site.name}</h3>
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">{rule ? MODE_LABELS[rule.billing_type] : 'Non configuré'}</span>
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">{rule ? (isFlatRule(rule) ? 'Mensuel fixe' : MODE_LABELS[rule.billing_type]) : 'Non configuré'}</span>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">{describeRule(rule)}</p>
                     </div>
@@ -294,7 +381,7 @@ export function TarificationManager({
                         <Stat value={stats.families} label="familles" />
                         <Stat value={stats.children} label="enfants" />
                         <Stat value={`${stats.monthly.toFixed(0)}€`} label="/ mois" mono accent />
-                        <Stat value={`${(stats.monthly * 10).toFixed(0)}€`} label="/ an" mono />
+                        <Stat value={`${(stats.monthly * (rule?.months_per_year ?? 10)).toFixed(0)}€`} label="/ an" mono />
                         <Stat value={`${stats.pctRevenue}%`} label="du CA" />
                       </div>
                     )}
@@ -320,7 +407,12 @@ export function TarificationManager({
             <div className="flex items-center gap-4 rounded-xl bg-foreground px-4 py-3 text-background">
               <span className="flex-1 text-xs font-semibold uppercase tracking-wide">Total tous sites</span>
               <Stat value={`${totalMonthly.toFixed(0)}€`} label="/ mois" mono inverted />
-              <Stat value={`${(totalMonthly * 10).toFixed(0)}€`} label="/ an" mono inverted />
+              <Stat
+                value={`${siteStats.reduce((sum, s) => sum + s.monthly * (rulesBySite[s.siteId]?.months_per_year ?? 10), 0).toFixed(0)}€`}
+                label="/ an"
+                mono
+                inverted
+              />
             </div>
           )}
         </div>

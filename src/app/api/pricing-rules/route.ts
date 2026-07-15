@@ -8,6 +8,11 @@ const numberOrNull = z.preprocess(
   z.number().min(0).max(99999).nullable()
 )
 
+const intOrDefault = (def: number, min: number, max: number) => z.preprocess(
+  (value) => value === '' || value === null || value === undefined ? def : Number(value),
+  z.number().int().min(min).max(max)
+)
+
 const PricingRuleSchema = z.object({
   site_id: z.string().uuid(),
   name: z.string().min(1).max(120),
@@ -18,6 +23,15 @@ const PricingRuleSchema = z.object({
   price_3_children: numberOrNull.optional(),
   price_4_children: numberOrNull.optional(),
   price_5plus: numberOrNull.optional(),
+  // Options étendues (migration 019)
+  registration_fee: numberOrNull.optional(),
+  registration_fee_scope: z.enum(['per_child', 'per_family']).optional(),
+  months_per_year: intOrDefault(10, 1, 12).optional(),
+  sessions_per_month: intOrDefault(4, 1, 31).optional(),
+  annual_discount_pct: z.preprocess(
+    (value) => value === '' || value === null || value === undefined ? null : Number(value),
+    z.number().min(0).max(100).nullable()
+  ).optional(),
   effective_from: z.string().min(10).max(10),
   effective_until: z.string().min(10).max(10).nullable().optional(),
   is_active: z.boolean().optional(),
@@ -96,6 +110,11 @@ export async function POST(request: NextRequest) {
         price_3_children: parsed.data.billing_type !== 'per_session' ? parsed.data.price_3_children ?? parsed.data.price_2_children ?? parsed.data.price_1_child ?? 0 : null,
         price_4_children: parsed.data.billing_type !== 'per_session' ? parsed.data.price_4_children ?? parsed.data.price_3_children ?? parsed.data.price_1_child ?? 0 : null,
         price_5plus: parsed.data.billing_type !== 'per_session' ? parsed.data.price_5plus ?? parsed.data.price_4_children ?? parsed.data.price_1_child ?? 0 : null,
+        registration_fee: parsed.data.registration_fee ?? null,
+        registration_fee_scope: parsed.data.registration_fee_scope ?? 'per_child',
+        months_per_year: parsed.data.months_per_year ?? 10,
+        sessions_per_month: parsed.data.sessions_per_month ?? 4,
+        annual_discount_pct: parsed.data.annual_discount_pct ?? null,
         effective_from: parsed.data.effective_from,
         effective_until: parsed.data.effective_until || null,
         is_active: parsed.data.is_active ?? true,
