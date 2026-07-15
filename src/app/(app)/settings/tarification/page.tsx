@@ -70,6 +70,7 @@ export default async function TarificationPage() {
 
   return (
     <div className="p-6">
+      <div className="mx-auto max-w-6xl">
       <TarificationManager
         sites={sites as Site[]}
         initialRules={Array.from(ruleBySite.entries()).map(([siteId, rule]) => ({ siteId, rule }))}
@@ -82,6 +83,7 @@ export default async function TarificationPage() {
         totalMonthly={totalMonthly}
         isAdmin={ctx.role === 'admin'}
       />
+      </div>
     </div>
   )
 }
